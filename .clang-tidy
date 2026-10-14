@@ -1,0 +1,103 @@
+Checks: >
+  bugprone-*,
+  clang-analyzer-*,
+  concurrency-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,              
+  readability-*,
+  cppcoreguidelines-*,
+  -readability-function-cognitive-complexity,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-inconsistent-declaration-parameter-name,
+  -bugprone-easily-swappable-parameters,
+  -readability-convert-member-functions-to-static,
+  -readability-function-size,
+  -misc-non-private-member-variables-in-classes,
+  -misc-no-recursion,
+  -misc-include-cleaner,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-special-member-functions,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-narrowing-conversions,
+  -cppcoreguidelines-pro-type-vararg,
+  -bugprone-narrowing-conversions,
+  -misc-use-internal-linkage,
+  -readability-math-missing-parentheses,
+  -concurrency-mt-unsafe,
+  -modernize-use-designated-initializers,
+  -bugprone-empty-catch,
+  -readability-identifier-naming,
+# 只对本项目自己的头文件报诊断。不设置时 clang-tidy 只看 .cc，公开头文件
+# 里的问题会被完全漏掉；设成 .* 又会把 Eigen 等三方头文件全算进来。
+HeaderFilterRegex: 'include/coverage_path_planning/.*'
+
+CheckOptions:
+  # 配置认知复杂度（函数的复杂度阈值）
+  - key: readability-function-cognitive-complexity.Threshold
+    value: 20
+  # 忽略宏定义中的复杂性检查
+  - key: readability-function-cognitive-complexity.IgnoreMacros
+    value: true
+  # 配置 bugprone-argument-comment 的参数阈值
+  - key: bugprone-argument-comment.MinimumNumberOfArguments
+    value: 3
+  # 命名规约按项目实际风格写：类型 CamelCase，其余一律 snake_case，
+  # 编译期常量额外加 k_ 前缀（如 k_min_smooth_points）。
+  # 这一组选项必须和代码一致，否则整个检查只输出噪声。
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.UnionCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypedefCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.MemberCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstexprVariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstexprVariablePrefix
+    value: 'k_'
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: lower_case
+  - key: readability-identifier-naming.GlobalConstantPrefix
+    value: 'k_'
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-function-size.LineThreshold
+    value: 50
+  - key: readability-function-size.BranchThreshold
+    value: 10
+  - key: performance-unnecessary-copy-initialization.IgnoreImplicitCopy
+    value: false
+  - key: performance-for-range-copy.AllowedTypes
+    value: "std::string;std::vector<int>"
+  - key: modernize-use-auto.MinTypeNameLength
+    value: 5
+  - key: modernize-loop-convert.MinConfidence
+    value: reasonable
+  - key: cppcoreguidelines-owning-memory.LegacyResourceProducers
+    value: "malloc;calloc"
+  - key: cppcoreguidelines-pro-bounds-pointer-arithmetic.IgnoreMacros
+    value: true
+  - key: bugprone-string-constructor.WarnOnLargeLength
+    value: 1000
