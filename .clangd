@@ -3,7 +3,7 @@ CompileFlags:
     - -fmodules-ts
     - -fmodule-mapper=*
     - -fdeps-format=*
-  CompilationDatabase: "build"
+  CompilationDatabase: "../build"
 
 Index:
   Background: Build
