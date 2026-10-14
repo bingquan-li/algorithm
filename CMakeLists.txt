@@ -8,5 +8,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_subdirectory(third_party)
+add_subdirectory(common)
 add_subdirectory(implementations)
 add_subdirectory(experiments)
