@@ -4,5 +4,6 @@ add_executable(path_orientation
 
 target_link_libraries(path_orientation
     PRIVATE
-        straight_prefix
+        implementations::straight_prefix
+        algorithms::common
 )

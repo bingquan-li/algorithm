@@ -27,6 +27,6 @@ target_link_libraries(coverage_rerun
 
 # 提供统一的命名空间
 add_library(
-    coverage_path_planning::rerun
+    algorithms::rerun
     ALIAS coverage_rerun
 )
