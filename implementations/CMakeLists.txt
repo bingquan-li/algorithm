@@ -1,1 +1,2 @@
 add_subdirectory(straight_prefix)
+add_subdirectory(path_smoothing)
