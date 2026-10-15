@@ -17,8 +17,8 @@ enum class RegionShape : std::uint8_t
 // 允许暂时为空，后续分别添加参数。
 struct ProjectedGradientOptions
 {
-  double radius{0.05};
   RegionShape shape{RegionShape::Circle};
+  std::size_t max_iterator{1000};
 };
 
 struct OsqpOptions
@@ -31,6 +31,7 @@ struct ProblemOptions
 {
   double reference_weight = 1.0;
   double smoothness_weight = 20.0;
+  // 最大位移
   double max_displacement = 0.05;
   bool fix_endpoints = true;
 };
