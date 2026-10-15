@@ -105,20 +105,28 @@ Eigen::Vector2d
 project_into_region(Eigen::Vector2d const& offset,
                     ProjectedGradientOptions const& solve)
 {
+  double const radius = solve.max_displacement;
+
   if(solve.shape == RegionShape::Circle)
   {
-    return std::max(1.0, solve.max_displacement / offset.norm()) * offset;
-  }
+    // return std::max(1.0, solve.max_displacement / offset.norm()) * offset;
+    double const distance = offset.norm();
 
+    if(distance <= radius)
+    {
+      return offset; // 圆内或边界上，包括零向量。
+    }
+
+    return (radius / distance) * offset;
+  }
   // return {std::clamp(offset.x(),
   //                    offset.x() - solve.max_displacement,
   //                    offset.x() + solve.max_displacement),
   //         std::clamp(offset.y(),
   //                    offset.y() - solve.max_displacement,
   //                    offset.y() + solve.max_displacement)};
-  return {
-      std::clamp(offset.x(), solve.max_displacement, solve.max_displacement),
-      std::clamp(offset.y(), solve.max_displacement, solve.max_displacement)};
+  return {std::clamp(offset.x(), -radius, radius),
+          std::clamp(offset.y(), -radius, radius)};
 }
 } // namespace
 
@@ -162,11 +170,12 @@ solve_backend(std::vector<Eigen::Vector2d> const& origin,
         Eigen::Vector2d offset = current[i] - origin[i] - step * gradient[i];
         next[i] = origin[i] + project_into_region(offset, solver);
       }
+
       max_step = std::max(max_step, (next[i] - current[i]).norm());
     }
-    current.swap(next);
 
-    result.max_step = std::min(max_step, result.max_step);
+    current.swap(next);
+    result.max_step = max_step;
 
     if(max_step < problem.tolerance)
     {
