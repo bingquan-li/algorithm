@@ -29,8 +29,7 @@ validate_problem(std::vector<Eigen::Vector2d> const& points,
     }
   }
 
-  detail::ensure_nonnegative_finite(problem.max_displacement,
-                                    "radius must be finite and non-negative");
+
   detail::ensure_nonnegative_finite(problem.reference_weight,
                                     "w_ref must be finite and non-negative");
   detail::ensure_nonnegative_finite(problem.smoothness_weight,
