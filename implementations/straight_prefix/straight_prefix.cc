@@ -140,7 +140,7 @@ extract(std::vector<Eigen::Vector2d> const& path)
   {
     moments.add(p[end]);
     // todo magic, 后面移动到配置中
-    if(s[end] < 0.3)
+    if(s[end] < 0.15)
     {
       continue;
     }
@@ -157,7 +157,7 @@ extract(std::vector<Eigen::Vector2d> const& path)
 
     // 注意这里的, p[end] 实际表示的是从 path 的起点到当前点的向量!
     // 这里检查两个事情:1.首尾跨度是否足够(当前点到起始点的直线距离),2.点集是否有确定的方向
-    if(p[end].norm() < 0.3 || !moments.direction(p[end], dir))
+    if(p[end].norm() < 0.15 || !moments.direction(p[end], dir))
     {
       stop = true;
     }
@@ -202,9 +202,16 @@ extract(std::vector<Eigen::Vector2d> const& path)
     if(stop)
     {
       result.first_rejected_index = end;
+      if(!result.valid)
+      {
+        result.direction = dir;
+        result.end_index = end;
+        result.normal = {-dir.y(), dir.x()};
+        result.heading = std::atan2(dir.y(), dir.x());
+      }
       return result;
     }
-
+    result.valid = true;
     result.end_index = end;
     result.point_count = end + 1;
     result.length = s[end];

@@ -60,8 +60,8 @@ struct Moments
 struct Result
 {
   // 最后通过检查的原始点，包含该点。
-  std::size_t end_index = std::numeric_limits<std::size_t>::max();
-  std::size_t first_rejected_index = std::numeric_limits<std::size_t>::max();
+  std::size_t end_index{0};
+  std::size_t first_rejected_index{0};
   std::size_t point_count = 0;
   bool entire_path_straight = false;
   double length = 0.0;        // 接受前缀的累计弧长。
@@ -71,6 +71,7 @@ struct Result
   double heading = 0.0;       // atan2(direction.y, direction.x)。
   double max_distance = 0.0;  // 最后通过检查前缀的指标。
   double max_heading_error = 0.0;
+  bool valid{false};
 };
 
 
