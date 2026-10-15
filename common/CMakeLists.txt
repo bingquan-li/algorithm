@@ -1,11 +1,13 @@
-add_library(common INTERFACE
+add_library(common 
+    SHARED
+        file.cc
 )
 target_include_directories(common
-    INTERFACE
+    PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 target_link_libraries(common
-    INTERFACE
+    PUBLIC
         algorithms::rerun
         algorithms::eigen
 )
