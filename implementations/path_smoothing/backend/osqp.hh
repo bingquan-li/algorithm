@@ -9,6 +9,6 @@ validate_solver(OsqpOptions const&);
 
 Result
 solve_backend(std::vector<Eigen::Vector2d> const& points,
-              ProblemOptions const& /* common */,
-              OsqpOptions const& /* solver */);
+              ProblemOptions const& problem,
+              OsqpOptions const& solver);
 } // namespace path_smoothing::detail

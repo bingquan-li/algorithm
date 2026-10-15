@@ -20,20 +20,25 @@ validate_problem(std::vector<Eigen::Vector2d> const& points,
         "path_smoothing: at least 3 points are required");
   }
 
-  for(auto const& point : points)
+  for(std::size_t i = 0; i < points.size(); ++i)
   {
-    if(!std::isfinite(point.x()) || !std::isfinite(point.y()))
+    if(!points[i].allFinite())
     {
-      throw std::invalid_argument(
-          "path_smoothing: all coordinates must be finite");
+      throw std::invalid_argument("path_smoothing: coordinates at point " +
+                                  std::to_string(i) + " must be finite");
     }
   }
 
 
   detail::ensure_nonnegative_finite(problem.reference_weight,
-                                    "w_ref must be finite and non-negative");
+                                    "reference_weight");
   detail::ensure_nonnegative_finite(problem.smoothness_weight,
-                                    "w_smooth must be finite and non-negative");
+                                    "smoothness_weight");
+  if(!std::isfinite(problem.tolerance) || problem.tolerance <= 0.0)
+  {
+    throw std::invalid_argument(
+        "path_smoothing: tolerance must be finite and positive");
+  }
 }
 
 } // namespace
