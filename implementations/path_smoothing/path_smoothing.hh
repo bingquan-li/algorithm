@@ -3,6 +3,7 @@
 #include <Eigen/Eigen>
 
 #include <variant>
+#include <ostream>
 
 
 namespace path_smoothing
@@ -56,6 +57,29 @@ struct Result
   /// 为真表示 max_step 已降到 tolerance 以下；为假表示耗尽了 max_iter。
   bool converged{false};
 };
+
+
+// 放在 Result 所属的命名空间中。
+inline std::ostream&
+operator<<(std::ostream& os, Result const& result)
+{
+  os << "Result{"
+     << "points=" << result.points.size()
+     << ", iterations=" << result.iterations << ", converged=" << std::boolalpha
+     << result.converged;
+
+  if(result.iterations > 0)
+  {
+    os << ", max_step=" << result.max_step;
+  }
+  else
+  {
+    os << ", max_step=N/A";
+  }
+
+  return os << '}';
+}
+
 
 Result
 smooth(std::vector<Eigen::Vector2d> const& points, Options const& options = {});
