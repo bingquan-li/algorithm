@@ -2,7 +2,7 @@
 
 #include "backend/osqp.hh"
 #include "backend/projected_gradient.hh"
-
+#include "detail/validation.hh"
 
 namespace path_smoothing
 {
@@ -11,17 +11,8 @@ namespace
 {
 
 void
-ensure_nonnegative_finite(double value, char const* name)
-{
-  if(!std::isfinite(value) || value < 0.0)
-  {
-    throw std::invalid_argument(name);
-  }
-}
-
-void
-validate_common(std::vector<Eigen::Vector2d> const& points,
-                ProblemOptions const& problem)
+validate_problem(std::vector<Eigen::Vector2d> const& points,
+                 ProblemOptions const& problem)
 {
   if(points.size() < 3)
   {
@@ -38,27 +29,28 @@ validate_common(std::vector<Eigen::Vector2d> const& points,
     }
   }
 
-  ensure_nonnegative_finite(problem.max_displacement,
-                            "radius must be finite and non-negative");
-  ensure_nonnegative_finite(problem.reference_weight,
-                            "w_ref must be finite and non-negative");
-  ensure_nonnegative_finite(problem.smoothness_weight,
-                            "w_smooth must be finite and non-negative");
+  detail::ensure_nonnegative_finite(problem.max_displacement,
+                                    "radius must be finite and non-negative");
+  detail::ensure_nonnegative_finite(problem.reference_weight,
+                                    "w_ref must be finite and non-negative");
+  detail::ensure_nonnegative_finite(problem.smoothness_weight,
+                                    "w_smooth must be finite and non-negative");
 }
 
 } // namespace
 
+
 Result
 smooth(std::vector<Eigen::Vector2d> const& points, Options const& options)
 {
-  validate_common(points, options.problem);
+  validate_problem(points, options.problem);
 
   return std::visit(
       [&](auto const& solver_options) -> Result
       {
         detail::validate_solver(solver_options);
 
-        return detail::solve_backend(points, options, solver_options);
+        return detail::solve_backend(points, options.problem, solver_options);
       },
       options.solver);
 }

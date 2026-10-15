@@ -8,7 +8,7 @@ validate_solver(OsqpOptions const& options)
 {}
 Result
 solve_backend(std::vector<Eigen::Vector2d> const& /*points*/,
-              Options const& /* common */,
+              ProblemOptions const& /* common */,
               OsqpOptions const& /* solver */)
 {
   return {};
