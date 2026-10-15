@@ -1,5 +1,6 @@
 add_library(path_smoothing SHARED
     path_smoothing.cc
+    backend/osqp.cc
     backend/projected_gradient.cc
 )
 target_include_directories(path_smoothing

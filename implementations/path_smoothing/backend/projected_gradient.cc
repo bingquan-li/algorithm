@@ -100,6 +100,26 @@ smooth_gradient(std::vector<Eigen::Vector2d> const& current,
   return gradient;
 }
 
+
+Eigen::Vector2d
+project_into_region(Eigen::Vector2d const& offset,
+                    ProjectedGradientOptions const& solve)
+{
+  if(solve.shape == RegionShape::Circle)
+  {
+    return std::max(1.0, solve.max_displacement / offset.norm()) * offset;
+  }
+
+  // return {std::clamp(offset.x(),
+  //                    offset.x() - solve.max_displacement,
+  //                    offset.x() + solve.max_displacement),
+  //         std::clamp(offset.y(),
+  //                    offset.y() - solve.max_displacement,
+  //                    offset.y() + solve.max_displacement)};
+  return {
+      std::clamp(offset.x(), solve.max_displacement, solve.max_displacement),
+      std::clamp(offset.y(), solve.max_displacement, solve.max_displacement)};
+}
 } // namespace
 
 
@@ -109,7 +129,7 @@ validate_solver(ProjectedGradientOptions const& options)
 
 // 同名重载：通过第三个参数的类型区分后端。
 Result
-solve_backend(std::vector<Eigen::Vector2d> const& points,
+solve_backend(std::vector<Eigen::Vector2d> const& origin,
               ProblemOptions const& problem,
               ProjectedGradientOptions const& solver)
 {
@@ -119,14 +139,45 @@ solve_backend(std::vector<Eigen::Vector2d> const& points,
   ensure_nonnegative_finite(lipschitz, "lipschitz");
 
   double const step = 1.0 / lipschitz;
-  std::size_t const size = points.size();
-  std::vector<Eigen::Vector2d> current = points;
+  std::size_t const size = origin.size();
+  std::vector<Eigen::Vector2d> current = origin;
   std::vector<Eigen::Vector2d> next(size);
+
+  Result result;
+  result.iterations = solver.max_iterator;
 
   for(std::size_t iter = 0; iter < solver.max_iterator; ++iter)
   {
+    auto gradient = smooth_gradient(current, origin, problem);
+
+    double max_step{0.0};
+    for(std::size_t i = 0; i < size; ++i)
+    {
+      if(problem.fix_endpoints && (i == 0 || i + 1 == size))
+      {
+        next[i] = origin[i];
+      }
+      else
+      {
+        Eigen::Vector2d offset = current[i] - origin[i] - step * gradient[i];
+        next[i] = origin[i] + project_into_region(offset, solver);
+      }
+      max_step = std::max(max_step, (next[i] - current[i]).norm());
+    }
+    current.swap(next);
+
+    result.max_step = std::min(max_step, result.max_step);
+
+    if(max_step < problem.tolerance)
+    {
+      result.iterations = iter;
+      result.converged = true;
+      break;
+    }
   }
-  return {};
+
+  result.points = std::move(current);
+  return result;
 }
 
 } // namespace path_smoothing::detail
