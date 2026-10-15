@@ -157,9 +157,9 @@ smooth_gradient(std::vector<Eigen::Vector2d> const& current,
 
     // residual 对三个点的导数分别为 I、-2I、I。
     // 按链式法则，将 J_i 对三个点的贡献累加到总梯度。
-    gradient[i - 1] += residual;
-    gradient[i] -= 2 * residual;
-    gradient[i + 1] += residual;
+    gradient[i - 1] += term_gradient;
+    gradient[i] -= 2 * term_gradient;
+    gradient[i + 1] += term_gradient;
   }
 
   // 也可以另一种麻烦的做法, 直接计算 J 对每个 pi 的梯度
