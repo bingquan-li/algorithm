@@ -2,6 +2,10 @@
 
 #include <Eigen/Eigen>
 
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <vector>
 #include <variant>
 #include <ostream>
 
@@ -15,13 +19,14 @@ enum class RegionShape : std::uint8_t
   Square,
 };
 
-// 允许暂时为空，后续分别添加参数。
 struct ProjectedGradientOptions
 {
   RegionShape shape{RegionShape::Circle};
   std::size_t max_iterator{1000};
-  // 最大位移
-  double max_displacement{0.05};
+  // 圆的半径 / 方形的半边长，必须有限且非负。
+  double max_displacement{0.5};
+  /// 向 std::clog 输出初始、首次、最终状态及按 max_iterator 自动间隔的迭代信息。
+  bool verbose{false};
 };
 
 struct OsqpOptions
@@ -32,6 +37,7 @@ struct ProblemOptions
 {
   double reference_weight{1.0};
   double smoothness_weight{20.0};
+  /// 最大单点更新量的停止阈值，必须有限且为正。
   double tolerance{1e-8};
   bool fix_endpoints = true;
 };
@@ -54,7 +60,7 @@ struct Result
   std::size_t iterations{0};
   /// 最后一轮的最大单点位移，即收敛判据的实测值。
   double max_step{std::numeric_limits<double>::max()};
-  /// 为真表示 max_step 已降到 tolerance 以下；为假表示耗尽了 max_iter。
+  /// 为真表示 max_step < tolerance，或目标函数恒为零；为假表示耗尽迭代次数。
   bool converged{false};
 };
 
@@ -65,8 +71,8 @@ operator<<(std::ostream& os, Result const& result)
 {
   os << "Result{"
      << "points=" << result.points.size()
-     << ", iterations=" << result.iterations << ", converged=" << std::boolalpha
-     << result.converged;
+     << ", iterations=" << result.iterations
+     << ", converged=" << (result.converged ? "true" : "false");
 
   if(result.iterations > 0)
   {
