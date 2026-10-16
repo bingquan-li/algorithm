@@ -9,6 +9,8 @@ target_include_directories(planning_base
 target_link_libraries(planning_base
     PUBLIC
         algorithms::eigen
+    PRIVATE
+        algorithms::json
 )
 
 add_library(implementations::planning_base ALIAS planning_base)
