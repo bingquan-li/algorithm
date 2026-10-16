@@ -42,6 +42,8 @@ public:
   }
   T&
   at(std::size_t x, std::size_t y);
+  T
+  at(std::size_t x, std::size_t y) const;
   [[nodiscard]] GridGeometry const&
   geometry() const noexcept
   {
@@ -105,7 +107,19 @@ GridMap<T>::contains(int x, int y) const noexcept
 
 template <typename T>
 T&
-GridMap<T>::at(std::size_t x, std::size_t y)
+GridMap<T>::GridMap<T>::at(std::size_t x, std::size_t y)
+{
+  if(x >= geometry_.width || y >= geometry_.height)
+  {
+    throw std::invalid_argument("x,y must <= geometry");
+  }
+
+  return data_[y * geometry_.width + x];
+}
+
+template <typename T>
+T
+GridMap<T>::at(std::size_t x, std::size_t y) const
 {
   if(x >= geometry_.width || y >= geometry_.height)
   {
