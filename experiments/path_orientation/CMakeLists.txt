@@ -1,9 +1,28 @@
 add_executable(path_orientation
     main.cc
+    boundary.cpp
+    debug.cpp
+    reference_line.cpp
 )
 
 target_link_libraries(path_orientation
     PRIVATE
         implementations::straight_prefix
         algorithms::common
+        algorithms::json
+        implementations::planning_base
+)
+add_executable(later_boundary
+    later_boundary_query.cc
+    local_escape_planner.cc
+    later_boundary_main.cc
+)
+
+target_link_libraries(later_boundary
+    PRIVATE
+        implementations::straight_prefix
+        algorithms::common
+        algorithms::json
+        algorithms::eigen
+        implementations::planning_base
 )
