@@ -1,6 +1,10 @@
 add_executable(pg_smooth
     pg_smooth.cc
 )
+target_compile_definitions(pg_smooth
+    PRIVATE
+        PG_SMOOTH_DEFAULT_PATH="${PROJECT_SOURCE_DIR}/../data/narrow_passage_reversing/path.csv"
+)
 target_link_libraries(pg_smooth
     PRIVATE
         algorithms::common
