@@ -173,10 +173,20 @@ log_candidates(rerun::RecordingStream const& rec,
   {
     auto const& candidate = result.candidates[i];
     bool const selected = result.selected && *result.selected == i;
-    auto const color = selected                  ? rerun::Color(50, 220, 80)
-                       : candidate.feasible      ? rerun::Color(60, 150, 255)
-                       : candidate.rejected_pose ? rerun::Color(240, 80, 80)
-                                                 : rerun::Color(245, 180, 45);
+    auto color = rerun::Color(245, 180, 45);
+    if(selected)
+    {
+      color = rerun::Color(50, 220, 80);
+    }
+    else if(candidate.feasible)
+    {
+      color = rerun::Color(60, 150, 255);
+    }
+    else if(candidate.rejected_pose)
+    {
+      color = rerun::Color(240, 80, 80);
+    }
+
     std::string const root =
         "gridmap/candidates/candidate_" + std::to_string(i);
     std::vector<rerun::Position3D> points;

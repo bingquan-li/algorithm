@@ -47,8 +47,11 @@ struct SearchTiming
   void
   finish_phase(SearchClock::time_point now)
   {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
     phases[phase_index].milliseconds +=
         std::chrono::duration<double, std::milli>(now - phase_begin).count();
+
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
     ++phases[phase_index].calls;
     phase_begin = now;
   }
@@ -68,22 +71,29 @@ struct SearchTiming
     // 阶段互不重叠，可相加；detail 是包含子调用的累计耗时，不可相加。
     for(std::size_t i = 0; i < phases.size(); ++i)
     {
-      std::fprintf(stderr,
-                   "[search timing] phase %-38s %.3f ms%s\n",
-                   phase_names[i],
-                   phases[i].milliseconds,
-                   phases[i].calls ? "" : " (skipped)");
+      std::fprintf(
+          stderr,
+          "[search timing] phase %-38s %.3f ms%s\n",
+          // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+          phase_names[i],
+          // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+          phases[i].milliseconds,
+          // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+          (phases[i].calls != 0U) ? "" : " (skipped)");
     }
     for(std::size_t i = 0; i < details.size(); ++i)
     {
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
       auto const& d = details[i];
-      std::fprintf(stderr,
-                   "[search timing] detail %-24s %.3f ms, calls=%zu, avg=%.6f "
-                   "ms (inclusive)\n",
-                   detail_names[i],
-                   d.milliseconds,
-                   d.calls,
-                   d.calls ? d.milliseconds / d.calls : 0.0);
+      std::fprintf(
+          stderr,
+          "[search timing] detail %-24s %.3f ms, calls=%zu, avg=%.6f "
+          "ms (inclusive)\n",
+          // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+          detail_names[i],
+          d.milliseconds,
+          d.calls,
+          (d.calls != 0U) ? d.milliseconds / d.calls : 0.0);
     }
     std::fprintf(stderr,
                  "[search timing] cell_distance calls=%zu\n",
@@ -106,6 +116,13 @@ public:
     ++entry_.calls;
   }
 
+  DetailTimer(DetailTimer const&) = delete;
+  DetailTimer&
+  operator=(DetailTimer const&) = delete;
+  DetailTimer(DetailTimer&&) = delete;
+  DetailTimer&
+  operator=(DetailTimer&&) = delete;
+
 private:
   TimingEntry& entry_;
   SearchClock::time_point begin_;
@@ -126,6 +143,27 @@ struct Context
   Config const& config;
   double radius;
   double step_bound;
+
+  Context(GridMap<std::uint8_t> const& grid,
+          Pose const& start,
+          std::span<Eigen::Vector2d const> footprint,
+          Config const& config,
+          double radius,
+          double step_bound)
+    : grid(grid)
+    , start(start)
+    , footprint(footprint)
+    , config(config)
+    , radius(radius)
+    , step_bound(step_bound)
+  {}
+
+  Context(Context const&) = delete;
+  Context&
+  operator=(Context const&) = delete;
+  Context(Context&&) = delete;
+  Context&
+  operator=(Context&&) = delete;
 };
 
 Context
