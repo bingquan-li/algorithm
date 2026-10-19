@@ -135,6 +135,7 @@ log_footprint(rerun::RecordingStream const& rec,
 // poses 只含通过连续碰撞检查的部分；拒绝位姿单独标记，不接成安全路径。
 void
 log_candidates(rerun::RecordingStream const& rec,
+               Scenario const& scenario,
                algorithms::Result const& result)
 {
   for(std::size_t i = 0; i < result.candidates.size(); ++i)
@@ -195,6 +196,19 @@ log_candidates(rerun::RecordingStream const& rec,
     }
     if(candidate.rejected_pose)
     {
+      // 使用碰撞检查实际采样的中点位姿，而非最后一个安全端点。
+      // 安全余量/区间运动界可能使车体尚未接触障碍就被拒绝。
+      auto const footprint = scenario.geometry.footprint_at(
+          {scenario.start_pose.frame_id, *candidate.rejected_pose});
+      if(footprint)
+      {
+        auto outline = footprint->vertices();
+        outline.push_back(outline.front());
+        log_line(rec,
+                 root + "/rejected_footprint",
+                 outline,
+                 rerun::Color(255, 40, 40));
+      }
       rec.log(
           root + "/rejected_pose",
           rerun::Points3D({position(candidate.rejected_pose->head<2>(), 0.05F)})
@@ -234,7 +248,9 @@ log_scene(rerun::RecordingStream const& rec,
 }
 
 void
-log_result(rerun::RecordingStream const& rec, algorithms::Result const& result)
+log_result(rerun::RecordingStream const& rec,
+           Scenario const& scenario,
+           algorithms::Result const& result)
 {
   // 展示规划实际使用的初始边界，不另行计算不同范围的辅助边界。
   timed_call("boundary lines submit",
@@ -250,7 +266,7 @@ log_result(rerun::RecordingStream const& rec, algorithms::Result const& result)
                         rerun::Color(255, 0, 0));
              });
   timed_call("all candidate paths build/submit",
-             [&] { log_candidates(rec, result); });
+             [&] { log_candidates(rec, scenario, result); });
   if(!result.selected)
   {
     return;
@@ -287,6 +303,6 @@ visualize(Scenario const& scenario,
                [&] { rec.log_file_from_path(blueprint->string()); });
   }
   log_scene(rec, scenario, occupied_threshold);
-  log_result(rec, result);
+  log_result(rec, scenario, result);
 }
 } // namespace narrow_passage

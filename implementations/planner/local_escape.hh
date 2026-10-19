@@ -36,7 +36,9 @@ struct Candidate
 {
   std::vector<Pose> poses; // 起点及已通过连续区间检查的各端点
   std::vector<Motion> motions;
-  std::optional<Pose> rejected_pose; // 首个未通过碰撞/安全余量检查的位姿
+  // 首个未通过碰撞/安全余量检查的区间中点位姿 (x, y, yaw)。
+  // 用于还原检查时的车体轮廓，不属于 poses 中已验证的安全轨迹。
+  std::optional<Pose> rejected_pose;
   bool feasible = false;
   double min_clearance = 0.0;
   // 含区间运动误差后的保守下界，最大为 clearance_cap
