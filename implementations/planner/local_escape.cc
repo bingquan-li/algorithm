@@ -8,6 +8,7 @@
 #include <limits>
 #include <numbers>
 #include <stdexcept>
+#include <utility>
 
 
 namespace algorithms
@@ -22,9 +23,6 @@ struct TimingEntry
   double milliseconds = 0.0;
   std::size_t calls = 0;
 };
-struct SearchTiming;
-thread_local SearchTiming* active_timing = nullptr;
-
 struct SearchTiming
 {
   static constexpr std::array<char const*, 6> phase_names{
@@ -42,15 +40,10 @@ struct SearchTiming
   std::array<TimingEntry, 6> phases{};
   std::array<TimingEntry, 4> details{};
   std::size_t cell_distance_calls = 0;
-  SearchTiming* previous = active_timing;
   SearchClock::time_point begin = SearchClock::now();
   SearchClock::time_point phase_begin = begin;
   std::size_t phase_index = 0;
 
-  SearchTiming()
-  {
-    active_timing = this;
-  }
   void
   finish_phase(SearchClock::time_point now)
   {
@@ -69,7 +62,6 @@ struct SearchTiming
   {
     auto const end = SearchClock::now();
     finish_phase(end);
-    active_timing = previous;
     double const total =
         std::chrono::duration<double, std::milli>(end - begin).count();
     std::fprintf(stderr, "[search timing] plan total: %.3f ms\n", total);
@@ -102,29 +94,60 @@ struct SearchTiming
 class DetailTimer
 {
 public:
-  explicit DetailTimer(std::size_t index)
-    : entry_((active_timing != nullptr) ? &active_timing->details[index]
-                                        : nullptr)
+  explicit DetailTimer(TimingEntry& entry)
+    : entry_(entry)
     , begin_(SearchClock::now())
   {}
   ~DetailTimer()
   {
-    if(entry_ != nullptr)
-    {
-      entry_->milliseconds +=
-          std::chrono::duration<double, std::milli>(SearchClock::now() - begin_)
-              .count();
-      ++entry_->calls;
-    }
+    entry_.milliseconds +=
+        std::chrono::duration<double, std::milli>(SearchClock::now() - begin_)
+            .count();
+    ++entry_.calls;
   }
 
 private:
-  TimingEntry* entry_;
+  TimingEntry& entry_;
   SearchClock::time_point begin_;
 };
 } // namespace
 
+namespace
+{
 constexpr double epsilon = 1e-10;
+
+// 单次规划共享的只读输入和派生参数，不持有搜索结果或计时状态。
+// 引用及 span 借用调用方的数据，生命周期不超过 plan()。
+struct Context
+{
+  GridMap<std::uint8_t> const& grid;
+  Pose const& start;
+  std::span<Eigen::Vector2d const> footprint;
+  Config const& config;
+  double radius;
+  double step_bound;
+};
+
+Context
+make_context(GridMap<std::uint8_t> const& grid,
+             Pose const& start,
+             std::span<Eigen::Vector2d const> footprint,
+             Config const& config)
+{
+  double radius = 0.0;
+  for(auto const& p : footprint)
+  {
+    radius = std::max(radius, p.norm());
+  }
+  // double const step_bound =
+  //     std::min({config.max_corner_step,
+  //               grid.geometry().resolution * 0.5,
+  //               (config.clearance_cap - config.safety_margin) * 0.5});
+  double const step_bound =
+      std::min({config.max_corner_step,
+                (config.clearance_cap - config.safety_margin) * 0.5});
+  return {grid, start, footprint, config, radius, step_bound};
+}
 
 
 Eigen::Vector2d
@@ -238,10 +261,6 @@ cell_distance(std::span<Eigen::Vector2d> polygon,
               Eigen::Vector2d const& lo,
               Eigen::Vector2d const& hi)
 {
-  if(active_timing)
-  {
-    ++active_timing->cell_distance_calls;
-  }
   std::array<Eigen::Vector2d, 4> const corners{lo,
                                                Eigen::Vector2d(hi.x(), lo.y()),
                                                hi,
@@ -311,18 +330,17 @@ cell_distance(std::span<Eigen::Vector2d> polygon,
 */
 // 传入 travel 通常表示行程，而你这里真正使用的是沿初始车身 X 轴的有符号纵向位移。
 BoundaryProfile
-compute_boundary_profile(algorithms::GridMap<std::uint8_t> const& grid,
+compute_boundary_profile(Context const& ctx,
                          Pose const& pose,
-                         std::span<Eigen::Vector2d const> footprint,
-                         Config const& config,
-                         double travel)
+                         double travel,
+                         SearchTiming& timing)
 {
-  DetailTimer const timing(0);
-  // 这里的 footprint 按前文约定，使用车身坐标系。并非是在 gridmap 中的坐标！
+  DetailTimer const detail_timer(timing.details[0]);
+  // 这里的 ctx.footprint 按前文约定，使用车身坐标系。并非是在 gridmap 中的坐标！
   // 纵向查询范围，机器人自身坐标系
-  double xmin = footprint.front().x();
+  double xmin = ctx.footprint.front().x();
   double xmax = xmin;
-  for(auto const& p : footprint)
+  for(auto const& p : ctx.footprint)
   {
     xmin = std::min(xmin, p.x());
     xmax = std::max(xmax, p.x());
@@ -348,11 +366,11 @@ compute_boundary_profile(algorithms::GridMap<std::uint8_t> const& grid,
   }
 
   result.boundary =
-      latter_boundary::build_lateral_boundary(grid,
+      latter_boundary::build_lateral_boundary(ctx.grid,
                                               pose.position,
                                               direction(pose),
                                               result.longitudinal_samples,
-                                              config.occupied_threshold);
+                                              ctx.config.occupied_threshold);
 
   //  分子。
   double numerator = 0.0;
@@ -375,14 +393,14 @@ compute_boundary_profile(algorithms::GridMap<std::uint8_t> const& grid,
     // 用直线 \(X=x\) 切车身多边形，该截面的最小、最大横坐标 \(y\) 是多少？, 是沿横轴切，使用的是车身坐标系！
     // low:最右侧的 y,high：最左侧的 y
     // 垂直于车身 x 轴、平行于车身 y 轴的
-    auto const [low, high] = lateral_extent(footprint, body_x);
+    auto const [low, high] = lateral_extent(ctx.footprint, body_x);
 
     // 从障碍距离中扣除车身，得到左右净空
     // 左右障碍物的距离 - 车身的宽度 - 安全余量
     double const left_clearance =
-        result.boundary.left_width[i] - high - config.safety_margin;
+        result.boundary.left_width[i] - high - ctx.config.safety_margin;
     double const right_clearance =
-        result.boundary.right_width[i] + low - config.safety_margin;
+        result.boundary.right_width[i] + low - ctx.config.safety_margin;
 
     result.left_clearance.push_back(left_clearance);
     result.right_clearance.push_back(right_clearance);
@@ -435,8 +453,8 @@ compute_boundary_profile(algorithms::GridMap<std::uint8_t> const& grid,
   result.right_slope = cov_right / variance;
   result.preferred_curvature =
       std::clamp(denominator > epsilon ? numerator / denominator : 0.0,
-                 -config.max_curvature,
-                 config.max_curvature);
+                 -ctx.config.max_curvature,
+                 ctx.config.max_curvature);
   return result;
 }
 
@@ -456,80 +474,14 @@ world_footprint(Pose const& pose, std::span<Eigen::Vector2d const> footprint)
 }
 
 
-// // 对任意简单（含凹）多边形计算与闭合障碍格的距离。
-// double
-// cell_distance(std::span<Eigen::Vector2d> polygon,
-//               Eigen::Vector2d const& lo,
-//               Eigen::Vector2d const& hi)
-// {
-//   std::array<Eigen::Vector2d, 4> const corners{lo,
-//                                                Eigen::Vector2d(hi.x(), lo.y()),
-//                                                hi,
-//                                                Eigen::Vector2d(lo.x(), hi.y())};
-//   if(inside(lo, polygon))
-//   {
-//     return 0.0; // 整个障碍格位于 footprint 内部
-//   }
-//   double result = std::numeric_limits<double>::infinity();
-//   for(std::size_t i = 0; i < polygon.size(); ++i)
-//   {
-//     auto const& a = polygon[i];
-//     auto const& b = polygon[(i + 1) % polygon.size()];
-//     Eigen::Vector2d const offset = (lo - a).cwiseMax(a - hi).cwiseMax(0.0);
-//     result = std::min(result, offset.norm());
-//     if(result == 0.0)
-//     {
-//       return 0.0;
-//     }
-//     // Slab 交点检查，包含边缘/角点接触。
-//     double enter = 0.0;
-//     double leave = 1.0;
-//     for(int axis = 0; axis < 2; ++axis)
-//     {
-//       double const delta = b[axis] - a[axis];
-//       if(delta == 0.0)
-//       {
-//         if(a[axis] < lo[axis] || a[axis] > hi[axis])
-//         {
-//           enter = 2.0;
-//         }
-//       }
-//       else
-//       {
-//         double t0 = (lo[axis] - a[axis]) / delta;
-//         double t1 = (hi[axis] - a[axis]) / delta;
-//         if(t0 > t1)
-//         {
-//           std::swap(t0, t1);
-//         }
-//         enter = std::max(enter, t0);
-//         leave = std::min(leave, t1);
-//       }
-//     }
-//     if(enter <= leave)
-//     {
-//       return 0.0;
-//     }
-//     for(auto const& corner : corners)
-//     {
-//       result = std::min(result, point_segment_distance(corner, a, b));
-//     }
-//   }
-//   return result;
-// }
-
 
 double
-footprint_clearance(algorithms::GridMap<std::uint8_t> const& grid,
-                    Pose const& pose,
-                    std::span<Eigen::Vector2d const> footprint,
-                    double cap,
-                    std::uint8_t occupied_threshold)
+footprint_clearance(Context const& ctx, Pose const& pose, SearchTiming& timing)
 {
-  DetailTimer const timing(1);
-  // 将局部 footprint 转换到全局 pose
-  auto polygon = world_footprint(pose, footprint);
-  auto const& g = grid.geometry();
+  DetailTimer const detail_timer(timing.details[1]);
+  // 将局部 ctx.footprint 转换到全局 pose
+  auto polygon = world_footprint(pose, ctx.footprint);
+  auto const& g = ctx.grid.geometry();
   Eigen::Vector2d low = polygon.front();
   Eigen::Vector2d high = low;
   for(auto const& p : polygon)
@@ -537,7 +489,7 @@ footprint_clearance(algorithms::GridMap<std::uint8_t> const& grid,
     low = low.cwiseMin(p);
     high = high.cwiseMax(p);
   }
-  double distance = std::min({cap,
+  double distance = std::min({ctx.config.clearance_cap,
                               low.x() - g.origin_x,
                               low.y() - g.origin_y,
                               g.origin_x + g.width * g.resolution - high.x(),
@@ -563,7 +515,7 @@ footprint_clearance(algorithms::GridMap<std::uint8_t> const& grid,
   {
     for(int x = xmin; x <= xmax; ++x)
     {
-      if(grid(x, y) < occupied_threshold)
+      if(ctx.grid(x, y) < ctx.config.occupied_threshold)
       {
         continue;
       }
@@ -576,6 +528,7 @@ footprint_clearance(algorithms::GridMap<std::uint8_t> const& grid,
       {
         continue;
       }
+      ++timing.cell_distance_calls;
       distance =
           std::min(distance, cell_distance(polygon, cell_low, cell_high));
       if(distance <= epsilon)
@@ -607,20 +560,17 @@ advance(Pose const& start, Motion const& motion, double fraction)
 
 
 Candidate
-extend(Candidate candidate,
+extend(Context const& ctx,
+       Candidate candidate,
        Motion const& motion,
-       double radius,
-       double step_bound,
-       GridMap<uint8_t> const& grid,
-       std::span<Eigen::Vector2d const> footprint,
-       Config const& config)
+       SearchTiming& timing)
 {
-  DetailTimer const timing(2);
+  DetailTimer const detail_timer(timing.details[2]);
   candidate.motions.push_back(motion);
   Pose const from = candidate.poses.back();
   double const angle = motion.rotation + motion.curvature * motion.distance;
-  double const bound = std::abs(motion.distance) + radius * std::abs(angle);
-  double const step_count = std::max(1.0, std::ceil(bound / step_bound));
+  double const bound = std::abs(motion.distance) + ctx.radius * std::abs(angle);
+  double const step_count = std::max(1.0, std::ceil(bound / ctx.step_bound));
   if(!std::isfinite(step_count) || step_count > 100000)
   {
     throw std::invalid_argument(
@@ -635,14 +585,10 @@ extend(Candidate candidate,
     // 运动 i+0.5 个 step 之后的位资
     Pose const midpoint = advance(from, motion, (i + 0.5) / steps);
     // 计算当前的净空
-    double const clearance = footprint_clearance(grid,
-                                                 midpoint,
-                                                 footprint,
-                                                 config.clearance_cap,
-                                                 config.occupied_threshold);
+    double const clearance = footprint_clearance(ctx, midpoint, timing);
 
     double const lower_bound = std::max(0.0, clearance - half_motion_bound);
-    if(lower_bound <= config.safety_margin + epsilon)
+    if(lower_bound <= ctx.config.safety_margin + epsilon)
     {
       candidate.rejected_pose = midpoint;
       candidate.reason = "collision_or_margin";
@@ -689,24 +635,24 @@ curvatures(BoundaryProfile const& boundary, Config const& config)
 
 
 void
-evaluate_and_record(Candidate candidate,
+evaluate_and_record(Context const& ctx,
+                    Candidate candidate,
                     bool terminal,
                     Result& result,
-                    Pose const& start,
-                    Config const& config)
+                    SearchTiming& timing)
 {
-  DetailTimer const timing(3);
+  DetailTimer const detail_timer(timing.details[3]);
   Pose const& end = candidate.poses.back();
   // 首先计算相对最初位姿的位移：
-  Eigen::Vector2d const offset = end.position - start.position;
-  Eigen::Vector2d const forward = direction(start);
+  Eigen::Vector2d const offset = end.position - ctx.start.position;
+  Eigen::Vector2d const forward = direction(ctx.start);
   Eigen::Vector2d const left(-forward.y(), forward.x());
 
   candidate.reverse_progress = -offset.dot(forward);
   // feasible adj.可行的
   candidate.feasible =
       terminal && !candidate.rejected_pose &&
-      candidate.reverse_progress >= config.min_reverse_progress;
+      candidate.reverse_progress >= ctx.config.min_reverse_progress;
 
   if(!candidate.rejected_pose)
   {
@@ -737,10 +683,11 @@ evaluate_and_record(Candidate candidate,
   }
 
   // 整个候选路径的评估
-  candidate.score =
-      4.0 * candidate.reverse_progress + 2.0 * candidate.min_clearance -
-      forward_distance - 0.25 * turning - 0.15 * curvature_effort -
-      0.4 * std::abs(offset.dot(left)) - 0.2 * std::abs(end.yaw - start.yaw);
+  candidate.score = 4.0 * candidate.reverse_progress +
+                    2.0 * candidate.min_clearance - forward_distance -
+                    0.25 * turning - 0.15 * curvature_effort -
+                    0.4 * std::abs(offset.dot(left)) -
+                    0.2 * std::abs(end.yaw - ctx.start.yaw);
 
   std::size_t const index = result.candidates.size();
   if(candidate.feasible &&
@@ -754,78 +701,51 @@ evaluate_and_record(Candidate candidate,
 
 
 void
-try_reverse(Candidate const& prefix,
-            Config const& config,
-            GridMap<uint8_t> const& grid,
-            std::span<Eigen::Vector2d const> footprint,
-            double radius,
-            double step_bound,
+try_reverse(Context const& ctx,
+            Candidate const& prefix,
             Result& result,
-            Pose const& start)
+            SearchTiming& timing)
 {
-  auto const boundaries = compute_boundary_profile(grid,
+  auto const boundaries = compute_boundary_profile(ctx,
                                                    prefix.poses.back(),
-                                                   footprint,
-                                                   config,
-                                                   -config.reverse_length);
-  for(double curvature : curvatures(boundaries, config))
+                                                   -ctx.config.reverse_length,
+                                                   timing);
+  for(double curvature : curvatures(boundaries, ctx.config))
   {
-    evaluate_and_record(extend(prefix,
-                               {-config.reverse_length, curvature, 0.0},
-                               radius,
-                               step_bound,
-                               grid,
-                               footprint,
-                               config),
+    evaluate_and_record(ctx,
+                        extend(ctx,
+                               prefix,
+                               {-ctx.config.reverse_length, curvature, 0.0},
+                               timing),
                         true,
                         result,
-                        start,
-                        config);
+                        timing);
   }
 }
 
 
 void
-try_rotations(Candidate const& prefix,
-              Config const& config,
-              GridMap<uint8_t> const& grid,
-              std::span<Eigen::Vector2d const> footprint,
-              double radius,
-              double step_bound,
+try_rotations(Context const& ctx,
+              Candidate const& prefix,
               Result& result,
-              Pose const& start)
+              SearchTiming& timing)
 {
-  if(!config.allow_in_place_rotation)
+  if(!ctx.config.allow_in_place_rotation)
   {
     return;
   }
-  for(double angle : config.rotation_angles)
+  for(double angle : ctx.config.rotation_angles)
   {
-    auto rotated = extend(prefix,
-                          {0.0, 0.0, angle},
-                          radius,
-                          step_bound,
-                          grid,
-                          footprint,
-                          config);
-    evaluate_and_record(rotated, true, result, start, config);
+    auto rotated = extend(ctx, prefix, {0.0, 0.0, angle}, timing);
+    evaluate_and_record(ctx, rotated, true, result, timing);
     if(!rotated.rejected_pose)
     {
-      try_reverse(rotated,
-                  config,
-                  grid,
-                  footprint,
-                  radius,
-                  step_bound,
-                  result,
-                  start);
+      try_reverse(ctx, rotated, result, timing);
     }
   }
 }
 
 
-namespace
-{
 void
 validate(algorithms::GridMap<std::uint8_t> const& grid,
          Pose const& start,
@@ -900,6 +820,72 @@ validate(algorithms::GridMap<std::uint8_t> const& grid,
     throw std::invalid_argument("Local escape: degenerate footprint");
   }
 }
+
+Result
+search(Context const& ctx, SearchTiming& timing)
+{
+  Result result;
+  // 这是初始位姿下，面向后退动作的左右边界信息。它主要用于解释环境和引导候选，不能单独证明轨迹安全。
+  result.boundary = compute_boundary_profile(ctx,
+                                             ctx.start,
+                                             -ctx.config.reverse_length,
+                                             timing);
+  timing.phase(1);
+  // 起点安全检查
+  double const initial_clearance = footprint_clearance(ctx, ctx.start, timing);
+  // 这里要求严格大于安全余量。也就是说，即使起点尚未发生实际碰撞，只要安全
+  // 余量不足，也返回 start_blocked。
+  if(initial_clearance <= ctx.config.safety_margin + epsilon)
+  {
+    result.status = Status::start_blocked;
+    return result;
+  }
+
+  // 标识整个运动的起点
+  Candidate root;
+  root.poses.push_back(ctx.start);
+  root.min_clearance = initial_clearance;
+
+  timing.phase(2);
+  try_reverse(ctx, root, result, timing);
+  if(!result.selected)
+  {
+    timing.phase(3);
+    try_rotations(ctx, root, result, timing);
+    timing.phase(4);
+    std::vector<Candidate> forward_prefixes;
+    for(double length : ctx.config.forward_lengths)
+    {
+      auto const boundaries =
+          compute_boundary_profile(ctx, ctx.start, length, timing);
+      for(double curvature : curvatures(boundaries, ctx.config))
+      {
+        auto forward = extend(ctx, root, {length, curvature, 0.0}, timing);
+        evaluate_and_record(ctx, forward, false, result, timing);
+        if(!forward.rejected_pose)
+        {
+          try_reverse(ctx, forward, result, timing);
+          forward_prefixes.push_back(std::move(forward));
+        }
+      }
+    }
+    timing.phase(5);
+    // 有限宽度搜索前进 + 原地旋转 + 后退；每次重新计算当地左右边界。
+    std::stable_sort(forward_prefixes.begin(),
+                     forward_prefixes.end(),
+                     [](Candidate const& a, Candidate const& b)
+                     { return a.min_clearance > b.min_clearance; });
+    for(std::size_t i = 0;
+        i < std::min(ctx.config.forward_beam_width, forward_prefixes.size());
+        ++i)
+    {
+      try_rotations(ctx, forward_prefixes[i], result, timing);
+    }
+  }
+  result.status = result.selected ? Status::success : Status::no_path;
+  return result;
+}
+
 } // namespace
 
 Result
@@ -915,109 +901,8 @@ plan(algorithms::GridMap<std::uint8_t> const& grid,
   }
   validate(grid, start, footprint, config);
 
-  Result result;
-  // 这是初始位姿下，面向后退动作的左右边界信息。它主要用于解释环境和引导候选，不能单独证明轨迹安全。
-  result.boundary = compute_boundary_profile(grid,
-                                             start,
-                                             footprint,
-                                             config,
-                                             -config.reverse_length);
-  double const step_bound =
-      std::min({config.max_corner_step,
-                grid.geometry().resolution * 0.5,
-                (config.clearance_cap - config.safety_margin) * 0.5});
-  double radius = 0.0;
-  for(auto const& p : footprint)
-  {
-    radius = std::max(radius, p.norm());
-  }
-
-  timing.phase(1);
-  // 起点安全检查
-  double const initial_clearance =
-      footprint_clearance(grid,
-                          start,
-                          footprint,
-                          config.clearance_cap,
-                          config.occupied_threshold);
-  // 这里要求严格大于安全余量。也就是说，即使起点尚未发生实际碰撞，只要安全
-  // 余量不足，也返回 start_blocked。
-  if(initial_clearance <= config.safety_margin + epsilon)
-  {
-    result.status = Status::start_blocked;
-    return result;
-  }
-
-  // 标识整个运动的起点
-  Candidate root;
-  root.poses.push_back(start);
-  root.min_clearance = initial_clearance;
-
-  timing.phase(2);
-  try_reverse(root, config, grid, footprint, radius, step_bound, result, start);
-  if(!result.selected)
-  {
-    timing.phase(3);
-    try_rotations(root,
-                  config,
-                  grid,
-                  footprint,
-                  radius,
-                  step_bound,
-                  result,
-                  start);
-    timing.phase(4);
-    std::vector<Candidate> forward_prefixes;
-    for(double length : config.forward_lengths)
-    {
-      auto const boundaries =
-          compute_boundary_profile(grid, start, footprint, config, length);
-      for(double curvature : curvatures(boundaries, config))
-      {
-        auto forward = extend(root,
-                              {length, curvature, 0.0},
-                              radius,
-                              step_bound,
-                              grid,
-                              footprint,
-                              config);
-        evaluate_and_record(forward, false, result, start, config);
-        if(!forward.rejected_pose)
-        {
-          try_reverse(forward,
-                      config,
-                      grid,
-                      footprint,
-                      radius,
-                      step_bound,
-                      result,
-                      start);
-          forward_prefixes.push_back(std::move(forward));
-        }
-      }
-    }
-    timing.phase(5);
-    // 有限宽度搜索前进 + 原地旋转 + 后退；每次重新计算当地左右边界。
-    std::stable_sort(forward_prefixes.begin(),
-                     forward_prefixes.end(),
-                     [](Candidate const& a, Candidate const& b)
-                     { return a.min_clearance > b.min_clearance; });
-    for(std::size_t i = 0;
-        i < std::min(config.forward_beam_width, forward_prefixes.size());
-        ++i)
-    {
-      try_rotations(forward_prefixes[i],
-                    config,
-                    grid,
-                    footprint,
-                    radius,
-                    step_bound,
-                    result,
-                    start);
-    }
-  }
-  result.status = result.selected ? Status::success : Status::no_path;
-  return result;
+  Context const ctx = make_context(grid, start, footprint, config);
+  return search(ctx, timing);
 }
 
 } // namespace algorithms
