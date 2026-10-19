@@ -106,7 +106,7 @@ struct Config
   double min_reverse_progress = 0.1; // 相对初始朝向的净后退距离，m
   double max_curvature = 1.2;        // d(yaw)/d(有符号弧长)，1/m
   double safety_margin = 0.02;       // 整个 footprint 的余量，m
-  double max_corner_step = 0.1;     // 角点每次碰撞检查的最大运动上界，m
+  double max_corner_step = 0.1;      // 角点每次碰撞检查的最大运动上界，m
   double clearance_cap = 0.3;        // 距离评分截断值，m
   std::vector<double> forward_lengths{0.15, 0.3};
   std::vector<double> rotation_angles{-0.3, -0.15, 0.15, 0.3}; // rad

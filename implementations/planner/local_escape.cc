@@ -655,17 +655,14 @@ curvatures(BoundaryProfile const& boundary, Config const& config)
     values.push_back(factor * config.max_curvature);
   }
   // 排序和去掉重复候选
-  std::sort(values.begin(), values.end());
-  values.erase(std::unique(values.begin(),
-                           values.end(),
-                           [](double a, double b)
-                           { return std::abs(a - b) < epsilon; }),
-               values.end());
+  std::ranges::sort(values);
+  auto const duplicates = std::ranges::unique(
+      values, [](double a, double b) { return std::abs(a - b) < epsilon; });
+  values.erase(duplicates.begin(), duplicates.end());
 
   //  第二次排序：优先尝试更接近建议的曲率
-  std::stable_sort(
-      values.begin(),
-      values.end(),
+  std::ranges::stable_sort(
+      values,
       [preferred](double a, double b)
       { return std::abs(a - preferred) < std::abs(b - preferred); });
   return values;
@@ -909,8 +906,7 @@ search(Context const& ctx, SearchTiming& timing)
     }
     timing.phase(5);
     // 有限宽度搜索前进 + 原地旋转 + 后退；每次重新计算当地左右边界。
-    std::stable_sort(forward_prefixes.begin(),
-                     forward_prefixes.end(),
+    std::ranges::stable_sort(forward_prefixes,
                      [](Candidate const& a, Candidate const& b)
                      { return a.min_clearance > b.min_clearance; });
     for(std::size_t i = 0;
