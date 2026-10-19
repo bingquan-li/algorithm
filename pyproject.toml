@@ -8,4 +8,5 @@ dependencies = [
     "matplotlib>=3.11.2",
     "numpy>=2.5.4",
     "pyqt5>=5.15.11",
+    "rerun-sdk==0.39.0",
 ]

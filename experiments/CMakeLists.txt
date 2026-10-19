@@ -1,3 +1,4 @@
 add_subdirectory(path_orientation)
 add_subdirectory(path_smoothing)
 add_subdirectory(ransac_line_fitting)
+add_subdirectory(narrow_passage_reversing)
