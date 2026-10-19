@@ -1,4 +1,5 @@
 #include "scenario.hh"
+#include "footprint_io.hh"
 #include "timing.hh"
 
 #include <stdexcept>
@@ -61,25 +62,17 @@ load_scenario(std::filesystem::path const& input,
 {
   auto grid = timed_call("load_grid_map_json",
                          [&] { return algorithms::load_grid_map_json(input); });
-  auto const configured =
-      timed_call("load_footprint_config",
-                 [&] { return algorithms::load_footprint(footprint_config); });
-  auto footprint = timed_call("fit_footprint_pose",
-                              [&]
-                              {
-                                return algorithms::place_footprint(
-                                    configured,
-                                    algorithms::load_footprint_vertices(input));
-                              });
+  auto body =
+      timed_call("load_robot_geometry",
+                 [&] { return load_robot_geometry(footprint_config); });
+  auto const start_pose = timed_call(
+      "estimate_footprint_pose",
+      [&]
+      {
+        return estimate_footprint_pose(body, load_footprint(input));
+      });
 
-  algorithms::Pose const start{footprint.centroid, footprint.yaw()};
-  std::vector<Eigen::Vector2d> body;
-  body.reserve(configured.vertices.size());
-  for(auto const& vertex : configured.vertices)
-  {
-    body.emplace_back(vertex - configured.centroid);
-  }
-  return {std::move(grid), std::move(footprint), start, std::move(body)};
+  return {std::move(grid), std::move(body), start_pose};
 }
 
 } // namespace narrow_passage

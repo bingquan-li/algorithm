@@ -1,6 +1,7 @@
 add_executable(narrow_passage_reversing
     main.cc
     scenario.cc
+    footprint_io.cc
     visualization.cc
 )
 
@@ -13,4 +14,5 @@ target_link_libraries(narrow_passage_reversing PRIVATE
     implementations::planning_base
     implementations::planner
     algorithms::rerun
+    algorithms::json
 )

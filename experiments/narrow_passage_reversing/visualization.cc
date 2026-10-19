@@ -80,9 +80,11 @@ log_line(rerun::RecordingStream const& rec,
 void
 log_footprint(rerun::RecordingStream const& rec,
               std::string_view entity_path,
-              algorithms::Footprint const& footprint)
+              algorithms::RobotGeometry const& geometry,
+              algorithms::RearAxlePose const& pose)
 {
-  if(footprint.vertices.size() < 3)
+  auto const footprint = geometry.footprint_at(pose);
+  if(!footprint)
   {
     return;
   }
@@ -93,18 +95,19 @@ log_footprint(rerun::RecordingStream const& rec,
 
 
 
-  Point const& center = footprint.centroid;
-  Point const forward = footprint.forward.normalized();
+  Point const center = pose.pose.head<2>();
+  Point const forward(std::cos(pose.pose.z()), std::sin(pose.pose.z()));
 
   // 1. 八边形轮廓
-  auto outline = footprint.vertices;
+  auto outline = footprint->vertices();
   outline.push_back(outline.front());
 
   log_line(rec, root + "/outline", outline, rerun::Color(13, 148, 136));
 
   // 2. 车身纵向中心线
-  Point const rear_end = center - footprint.rear_extent * forward;
-  Point const front_end = center + footprint.front_extent * forward;
+  auto const& extents = geometry.extents();
+  Point const rear_end = center - extents.rear_m * forward;
+  Point const front_end = center + extents.front_m * forward;
 
   log_line(rec,
            root + "/longitudinal_axis",
@@ -112,7 +115,7 @@ log_footprint(rerun::RecordingStream const& rec,
            rerun::Color(148, 163, 184));
 
   // 3. 前进方向
-  double const length = footprint.length();
+  double const length = extents.front_m + extents.rear_m;
   Point const arrow = forward * std::max(0.1, length * 0.45);
 
   rec.log(root + "/forward",
@@ -223,7 +226,12 @@ log_scene(rerun::RecordingStream const& rec,
   timed_call(
       "footprint build/submit",
       [&]
-      { log_footprint(rec, "gridmap/footprint", scenario.world_footprint); });
+      {
+        log_footprint(rec,
+                      "gridmap/footprint",
+                      scenario.geometry,
+                      scenario.start_pose);
+      });
 }
 
 void

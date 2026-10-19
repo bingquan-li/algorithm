@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lateral_boundary.hh"
+#include "footprint.hh"
 
 #include <Eigen/Eigen>
 
@@ -10,6 +11,7 @@
 
 namespace algorithms
 {
+using Pose = Eigen::Vector3d;
 
 // 这里表示的是单个运动
 /*
@@ -30,13 +32,6 @@ struct Motion
 };
 
 
-struct Pose
-{
-  Eigen::Vector2d position = Eigen::Vector2d::Zero();
-  double yaw{0};
-};
-
-
 struct Candidate
 {
   std::vector<Pose> poses; // 起点及已通过连续区间检查的各端点
@@ -54,7 +49,7 @@ enum class Status : std::uint8_t
 {
   success,
   start_blocked,
-  no_path
+  no_path,
 };
 
 // 沿车身纵向展开的左右空间分布表
@@ -115,7 +110,14 @@ struct Config
   std::uint8_t occupied_threshold = 1;
 };
 
-// footprint 使用以 start.position 为原点、start.yaw 为朝向的车体坐标，单位米。
+// 固定车型 + 世界后轴位姿；车型必须提供局部轮廓，不用矩形替代未知轮廓。
+[[nodiscard]] Result
+plan(algorithms::GridMap<std::uint8_t> const& grid,
+     Pose const& start,
+     RobotGeometry const& geometry,
+     Config const& config = {});
+
+// 顶点入口：footprint 必须是以驱动轴中心为原点的车体坐标，单位米。
 // 接受简单多边形（可重复首点闭合）；非法输入抛出 invalid_argument。
 [[nodiscard]] Result
 plan(algorithms::GridMap<std::uint8_t> const& grid,

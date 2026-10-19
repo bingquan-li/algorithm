@@ -18,9 +18,8 @@ struct Options
 struct Scenario
 {
   algorithms::GridMap<std::uint8_t> grid;
-  algorithms::Footprint world_footprint;
-  algorithms::Pose start;
-  std::vector<Eigen::Vector2d> body_footprint;
+  algorithms::RobotGeometry geometry; // 配置中的固定车型及后轴局部轮廓。
+  algorithms::RearAxlePose start_pose; // 后轴的初始世界位姿。
 };
 
 Options

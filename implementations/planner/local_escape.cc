@@ -191,7 +191,7 @@ make_context(GridMap<std::uint8_t> const& grid,
 Eigen::Vector2d
 direction(Pose const& pose)
 {
-  return {std::cos(pose.yaw), std::sin(pose.yaw)};
+  return {std::cos(pose.z()), std::sin(pose.z())};
 }
 
 
@@ -405,7 +405,7 @@ compute_boundary_profile(Context const& ctx,
 
   result.boundary =
       latter_boundary::build_lateral_boundary(ctx.grid,
-                                              pose.position,
+                                              {pose.x(), pose.y()},
                                               direction(pose),
                                               result.longitudinal_samples,
                                               ctx.config.occupied_threshold);
@@ -506,7 +506,8 @@ world_footprint(Pose const& pose, std::span<Eigen::Vector2d const> footprint)
   result.reserve(footprint.size());
   for(auto const& p : footprint)
   {
-    result.emplace_back(pose.position + p.x() * forward + p.y() * left);
+    result.emplace_back(Eigen::Vector2d{pose.x(), pose.y()} + p.x() * forward +
+                        p.y() * left);
   }
   return result;
 }
@@ -589,10 +590,10 @@ advance(Pose const& start, Motion const& motion, double fraction)
   double const half = 0.5 * angle;
   double const sinc =
       std::abs(half) < 1e-8 ? 1.0 - half * half / 6.0 : std::sin(half) / half;
-  result.position +=
+  result.head<2>() +=
       ds * sinc *
-      Eigen::Vector2d(std::cos(start.yaw + half), std::sin(start.yaw + half));
-  result.yaw += angle;
+      Eigen::Vector2d(std::cos(start.z() + half), std::sin(start.z() + half));
+  result.z() += angle;
   return result;
 }
 
@@ -657,7 +658,8 @@ curvatures(BoundaryProfile const& boundary, Config const& config)
   // 排序和去掉重复候选
   std::ranges::sort(values);
   auto const duplicates = std::ranges::unique(
-      values, [](double a, double b) { return std::abs(a - b) < epsilon; });
+      values,
+      [](double a, double b) { return std::abs(a - b) < epsilon; });
   values.erase(duplicates.begin(), duplicates.end());
 
   //  第二次排序：优先尝试更接近建议的曲率
@@ -679,7 +681,7 @@ evaluate_and_record(Context const& ctx,
   DetailTimer const detail_timer(timing.details[3]);
   Pose const& end = candidate.poses.back();
   // 首先计算相对最初位姿的位移：
-  Eigen::Vector2d const offset = end.position - ctx.start.position;
+  Eigen::Vector2d const offset = end.head<2>() - ctx.start.head<2>();
   Eigen::Vector2d const forward = direction(ctx.start);
   Eigen::Vector2d const left(-forward.y(), forward.x());
 
@@ -722,7 +724,7 @@ evaluate_and_record(Context const& ctx,
                     2.0 * candidate.min_clearance - forward_distance -
                     0.25 * turning - 0.15 * curvature_effort -
                     0.4 * std::abs(offset.dot(left)) -
-                    0.2 * std::abs(end.yaw - ctx.start.yaw);
+                    0.2 * std::abs(end.z() - ctx.start.z());
 
   std::size_t const index = result.candidates.size();
   if(candidate.feasible &&
@@ -790,7 +792,7 @@ validate(algorithms::GridMap<std::uint8_t> const& grid,
   auto const finite_positive = [](double value)
   { return std::isfinite(value) && value > 0.0; };
   auto const& g = grid.geometry();
-  if(!start.position.allFinite() || !std::isfinite(start.yaw) ||
+  if(!start.head<2>().allFinite() || !std::isfinite(start.z()) ||
      footprint.size() < 3 || g.width == 0 || g.height == 0 ||
      g.width > std::numeric_limits<int>::max() ||
      g.height > std::numeric_limits<int>::max() ||
@@ -907,8 +909,8 @@ search(Context const& ctx, SearchTiming& timing)
     timing.phase(5);
     // 有限宽度搜索前进 + 原地旋转 + 后退；每次重新计算当地左右边界。
     std::ranges::stable_sort(forward_prefixes,
-                     [](Candidate const& a, Candidate const& b)
-                     { return a.min_clearance > b.min_clearance; });
+                             [](Candidate const& a, Candidate const& b)
+                             { return a.min_clearance > b.min_clearance; });
     for(std::size_t i = 0;
         i < std::min(ctx.config.forward_beam_width, forward_prefixes.size());
         ++i)
@@ -937,6 +939,17 @@ plan(algorithms::GridMap<std::uint8_t> const& grid,
 
   Context const ctx = make_context(grid, start, footprint, config);
   return search(ctx, timing);
+}
+
+Result
+plan(algorithms::GridMap<std::uint8_t> const& grid,
+     Pose const& start,
+     RobotGeometry const& geometry,
+     Config const& config)
+{
+  if(!geometry.local_footprint())
+    throw std::invalid_argument("Planning requires a local robot outline");
+  return plan(grid, start, geometry.local_footprint()->vertices(), config);
 }
 
 } // namespace algorithms
