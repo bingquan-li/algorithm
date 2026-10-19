@@ -1,6 +1,7 @@
 add_library(planning_base
     SHARED
         grid_map.cc
+        footprint.cc
 )
 target_include_directories(planning_base
     PUBLIC

@@ -54,7 +54,12 @@ public:
   {
     return {data_.data(), data_.size()};
   }
-
+  [[nodiscard]]
+  std::span<T const>
+  cells() const noexcept
+  {
+    return {data_.data(), data_.size()};
+  }
 
 private:
   GridGeometry geometry_;
@@ -107,7 +112,7 @@ GridMap<T>::contains(int x, int y) const noexcept
 
 template <typename T>
 T&
-GridMap<T>::GridMap<T>::at(std::size_t x, std::size_t y)
+GridMap<T>::at(std::size_t x, std::size_t y)
 {
   if(x >= geometry_.width || y >= geometry_.height)
   {
