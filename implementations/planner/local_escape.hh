@@ -32,7 +32,7 @@ struct Motion
 
 struct Pose
 {
-  Eigen::Vector2d position;
+  Eigen::Vector2d position = Eigen::Vector2d::Zero();
   double yaw{0};
 };
 
@@ -115,6 +115,8 @@ struct Config
   std::uint8_t occupied_threshold = 1;
 };
 
+// footprint 使用以 start.position 为原点、start.yaw 为朝向的车体坐标，单位米。
+// 接受简单多边形（可重复首点闭合）；非法输入抛出 invalid_argument。
 [[nodiscard]] Result
 plan(algorithms::GridMap<std::uint8_t> const& grid,
      Pose const& start,

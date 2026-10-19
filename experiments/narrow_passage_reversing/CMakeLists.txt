@@ -10,4 +10,5 @@ target_link_libraries(narrow_passage_reversing
         algorithms::eigen
         implementations::planning_base
         implementations::lateral_boundary
+        implementations::planner
 )
