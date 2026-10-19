@@ -385,7 +385,158 @@ Footprint
 load_footprint(std::filesystem::path const& path,
                FootprintOptions const& options)
 {
-  return make_footprint(load_footprint_vertices(path), options);
+  // The body configuration is authoritative; options only control validation.
+  if(!std::isfinite(options.relative_tolerance) ||
+     options.relative_tolerance <= 0.0 || options.relative_tolerance >= 0.01)
+  {
+    throw std::invalid_argument("Invalid footprint validation tolerance");
+  }
+  std::ifstream input(path);
+  if(!input)
+  {
+    throw std::runtime_error("Cannot open footprint configuration: " +
+                             path.string());
+  }
+  auto const document = nlohmann::json::parse(input);
+  if(document.at("coordinate_system") != "body" || document.at("unit") != "m" ||
+     document.at("axes").at("x_positive") != "forward" ||
+     document.at("axes").at("y_positive") != "left")
+  {
+    throw std::invalid_argument(
+        "Expected body coordinates in meters, +X forward, +Y left");
+  }
+  auto read_point = [](nlohmann::json const& value) -> Point
+  {
+    if(!value.is_array() || value.size() != 2 || !value[0].is_number() ||
+       !value[1].is_number())
+    {
+      throw std::invalid_argument("Expected [x, y]");
+    }
+    Point const p(value[0].get<double>(), value[1].get<double>());
+    if(!p.allFinite())
+    {
+      throw std::invalid_argument("Coordinates must be finite");
+    }
+    return p;
+  };
+  Footprint result;
+  result.centroid = read_point(document.at("drive_axle_center"));
+  auto const& data = document.at("data");
+  if(!data.is_array() || data.size() != 8)
+  {
+    throw std::invalid_argument(
+        "Body configuration requires eight unclosed vertices");
+  }
+  for(auto const& value : data)
+  {
+    result.vertices.push_back(read_point(value));
+  }
+  Point minimum = result.vertices.front() - result.centroid;
+  Point maximum = minimum;
+  for(auto const& vertex : result.vertices)
+  {
+    Point const delta = vertex - result.centroid;
+    minimum = minimum.cwiseMin(delta);
+    maximum = maximum.cwiseMax(delta);
+  }
+  double const scale = (maximum - minimum).maxCoeff();
+  if(!std::isfinite(scale) || scale <= 0.0)
+  {
+    throw std::invalid_argument("Degenerate body footprint");
+  }
+  std::vector<Point> normalized;
+  normalized.reserve(result.vertices.size());
+  for(auto const& vertex : result.vertices)
+  {
+    normalized.emplace_back((vertex - result.vertices.front()) / scale);
+  }
+  check_simple(normalized, options.relative_tolerance);
+  double area = 0.0;
+  for(std::size_t i = 0; i < normalized.size(); ++i)
+  {
+    area += cross(normalized[i], normalized[(i + 1) % normalized.size()]);
+  }
+  if(std::abs(area) <= options.relative_tolerance)
+  {
+    throw std::invalid_argument("Degenerate body footprint area");
+  }
+  auto const& extents = document.at("extents_from_drive_axle");
+  auto read_extent = [&](char const* name, double projected)
+  {
+    auto const& value = extents.at(name);
+    if(!value.is_number())
+    {
+      throw std::invalid_argument("Extent must be numeric");
+    }
+    double const distance = value.get<double>();
+    if(!std::isfinite(distance) || distance < 0.0 ||
+       std::abs(distance - projected) > 1e-6)
+    {
+      throw std::invalid_argument(
+          std::string("Invalid or inconsistent extent: ") + name);
+    }
+    return distance;
+  };
+  result.front_extent = read_extent("front_extent", maximum.x());
+  result.rear_extent = read_extent("rear_extent", -minimum.x());
+  result.left_extent = read_extent("left_extent", maximum.y());
+  result.right_extent = read_extent("right_extent", -minimum.y());
+  return result;
+}
+
+Footprint
+place_footprint(Footprint const& body,
+                std::vector<Point> const& world,
+                double max_vertex_error)
+{
+  if(body.vertices.size() != 8 || world.size() != body.vertices.size() ||
+     !std::isfinite(max_vertex_error) || max_vertex_error < 0.0)
+  {
+    throw std::invalid_argument(
+        "Invalid footprint correspondence or tolerance");
+  }
+  Point p_mean = Point::Zero();
+  Point q_mean = Point::Zero();
+  for(std::size_t i = 0; i < world.size(); ++i)
+  {
+    if(!body.vertices[i].allFinite() || !world[i].allFinite())
+    {
+      throw std::invalid_argument("Vertices must be finite");
+    }
+    p_mean += body.vertices[i];
+    q_mean += world[i];
+  }
+  p_mean /= static_cast<double>(world.size());
+  q_mean /= static_cast<double>(world.size());
+  double a = 0.0;
+  double b = 0.0;
+  for(std::size_t i = 0; i < world.size(); ++i)
+  {
+    Point const p = body.vertices[i] - p_mean;
+    Point const q = world[i] - q_mean;
+    a += p.dot(q);
+    b += cross(p, q);
+  }
+  if(!std::isfinite(a) || !std::isfinite(b) || std::hypot(a, b) <= 1e-15)
+  {
+    throw std::invalid_argument("Cannot determine footprint rotation");
+  }
+  Eigen::Rotation2Dd const rotation(std::atan2(b, a));
+  Point const translation = q_mean - rotation * p_mean;
+  Footprint result = body;
+  for(std::size_t i = 0; i < world.size(); ++i)
+  {
+    result.vertices[i] = rotation * body.vertices[i] + translation;
+    if((result.vertices[i] - world[i]).norm() > max_vertex_error)
+    {
+      throw std::invalid_argument(
+          "World footprint does not match body configuration; check vertex "
+          "order and tolerance");
+    }
+  }
+  result.centroid = rotation * body.centroid + translation;
+  result.forward = rotation * Point::UnitX();
+  return result;
 }
 
 } // namespace algorithms

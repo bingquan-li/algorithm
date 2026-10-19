@@ -9,6 +9,7 @@ namespace narrow_passage
 struct Options
 {
   std::filesystem::path input;
+  std::filesystem::path footprint;
   std::optional<std::filesystem::path> blueprint;
   bool viewer = true;
   bool help = false;
@@ -25,5 +26,6 @@ struct Scenario
 Options
 parse_options(int argc, char const* const* argv);
 Scenario
-load_scenario(std::filesystem::path const& input);
+load_scenario(std::filesystem::path const& input,
+              std::filesystem::path const& footprint_config);
 } // namespace narrow_passage

@@ -16,13 +16,14 @@ main(int argc, char** argv)
     if(options.help)
     {
       std::cout << "Usage: narrow_passage_reversing [--input frame.json] "
-                   "[--blueprint layout.rbl] [--no-viewer]\n";
+                   "[--footprint footprint.json] [--blueprint layout.rbl] "
+                   "[--no-viewer]\n";
       return 0;
     }
 
     ScopedTimer const total_timer("total (includes optional Rerun lifetime)");
-    // 这里默认加载的是输出的全局坐标下的 footprint
-    auto const scenario = load_scenario(options.input);
+    // 配置提供车体几何和轴心，全局顶点仅用于确定初始位姿。
+    auto const scenario = load_scenario(options.input, options.footprint);
     algorithms::Config const config;
     auto const result =
         timed_call("planner.plan",

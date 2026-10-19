@@ -5,6 +5,7 @@ add_executable(narrow_passage_reversing
 )
 
 target_compile_definitions(narrow_passage_reversing PRIVATE
+    NARROW_PASSAGE_DEFAULT_FOOTPRINT="${PROJECT_SOURCE_DIR}/../data/footprint.json"
     NARROW_PASSAGE_DEFAULT_INPUT="${PROJECT_SOURCE_DIR}/../data/narrow_passage_reverseing2/frame.json"
 )
 
