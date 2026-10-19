@@ -161,7 +161,7 @@ log_candidates(rerun::RecordingStream const& rec,
     points.reserve(candidate.poses.size());
     for(auto const& pose : candidate.poses)
     {
-      points.push_back(position(pose.position, selected ? 0.04F : 0.025F));
+      points.push_back(position(pose.head<2>(), selected ? 0.04F : 0.025F));
     }
     if(points.size() >= 2)
     {
@@ -178,7 +178,7 @@ log_candidates(rerun::RecordingStream const& rec,
           candidate.reason + " score=" + std::to_string(candidate.score) +
           " reverse=" + std::to_string(candidate.reverse_progress) + " m";
       rec.log(root + "/endpoint",
-              rerun::Points3D({position(end.position, 0.04F)})
+              rerun::Points3D({position(end.head<2>(), 0.04F)})
                   .with_colors({color})
                   .with_radii({0.012F})
                   .with_labels({label})
@@ -186,10 +186,10 @@ log_candidates(rerun::RecordingStream const& rec,
       // 原地旋转没有中心位移，用末端朝向箭头显示其结果。
       rec.log(root + "/heading",
               rerun::Arrows3D::from_vectors(
-                  {{static_cast<float>(0.12 * std::cos(end.yaw)),
-                    static_cast<float>(0.12 * std::sin(end.yaw)),
+                  {{static_cast<float>(0.12 * std::cos(end.z())),
+                    static_cast<float>(0.12 * std::sin(end.z())),
                     0.0F}})
-                  .with_origins({position(end.position, 0.04F)})
+                  .with_origins({position(end.head<2>(), 0.04F)})
                   .with_colors({color})
                   .with_radii({0.004F}));
     }
@@ -197,7 +197,7 @@ log_candidates(rerun::RecordingStream const& rec,
     {
       rec.log(
           root + "/rejected_pose",
-          rerun::Points3D({position(candidate.rejected_pose->position, 0.05F)})
+          rerun::Points3D({position(candidate.rejected_pose->head<2>(), 0.05F)})
               .with_colors({rerun::Color(255, 40, 40)})
               .with_radii({0.02F})
               .with_labels({"#" + std::to_string(i) + " collision_or_margin"})
@@ -223,15 +223,14 @@ log_scene(rerun::RecordingStream const& rec,
                                   [occupied_threshold](std::uint8_t value)
                                   { return value >= occupied_threshold; });
              });
-  timed_call(
-      "footprint build/submit",
-      [&]
-      {
-        log_footprint(rec,
-                      "gridmap/footprint",
-                      scenario.geometry,
-                      scenario.start_pose);
-      });
+  timed_call("footprint build/submit",
+             [&]
+             {
+               log_footprint(rec,
+                             "gridmap/footprint",
+                             scenario.geometry,
+                             scenario.start_pose);
+             });
 }
 
 void
@@ -261,7 +260,7 @@ log_result(rerun::RecordingStream const& rec, algorithms::Result const& result)
   path.reserve(selected.poses.size());
   for(auto const& pose : selected.poses)
   {
-    path.push_back(pose.position);
+    path.emplace_back(pose.head<2>());
   }
   timed_call(
       "selected path submit",

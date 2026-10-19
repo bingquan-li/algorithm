@@ -25,18 +25,18 @@ main(int argc, char** argv)
     // 配置提供车体几何和轴心，全局顶点仅用于确定初始位姿。
     auto const scenario = load_scenario(options.input, options.footprint);
     // 规划器的 Pose 不携带 frame_id；场景加载已确保位姿与地图同为 world。
-    algorithms::Pose const start{scenario.start_pose.pose.head<2>(),
+    algorithms::Pose const start{scenario.start_pose.pose.x(),
+                                 scenario.start_pose.pose.y(),
                                  scenario.start_pose.pose.z()};
     algorithms::Config const config;
-    auto const result =
-        timed_call("planner.plan",
-                   [&]
-                   {
-                     return algorithms::plan(scenario.grid,
-                                             start,
-                                             scenario.geometry,
-                                             config);
-                   });
+    auto const result = timed_call("planner.plan",
+                                   [&]
+                                   {
+                                     return algorithms::plan(scenario.grid,
+                                                             start,
+                                                             scenario.geometry,
+                                                             config);
+                                   });
 
     // 失败时也显示已生成的候选，便于定位被拒绝的位置。
     if(options.viewer)

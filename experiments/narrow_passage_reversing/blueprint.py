@@ -2,9 +2,10 @@ import rerun.blueprint as rrb
 
 blueprint = rrb.Blueprint(
     rrb.Spatial3DView(
-        name="narrow_passage",          # 原先视图名称显示为 "/"
-        origin="/",     # 以该实体作为视图参考原点
-        contents=["/**"], # 只显示这个实体
+        name="narrow_passage",  # 原先视图名称显示为 "/"
+        origin="/",  # 以该实体作为视图参考原点
+        contents=["/**"],  # 只显示这个实体
+        line_grid=rrb.LineGrid3D(visible=False),
     ),
     auto_layout=False,
     auto_views=False,
