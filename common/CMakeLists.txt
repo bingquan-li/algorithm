@@ -8,8 +8,9 @@ target_include_directories(common
 )
 target_link_libraries(common
     PUBLIC
-        algorithms::rerun
         algorithms::eigen
 )
 
 add_library(algorithms::common ALIAS common)
+
+add_subdirectory(rerun)

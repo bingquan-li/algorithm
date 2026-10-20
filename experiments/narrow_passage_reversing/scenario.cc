@@ -27,7 +27,8 @@ parse_options(int argc, char const* const* argv)
     {
       options.viewer = false;
     }
-    else if(arg == "--input" || arg == "--blueprint" || arg == "--footprint")
+    else if(arg == "--input" || arg == "--blueprint" || arg == "--footprint" ||
+            arg == "--save")
     {
       if(i + 1 >= argc)
       {
@@ -41,6 +42,10 @@ parse_options(int argc, char const* const* argv)
       else if(arg == "--footprint")
       {
         options.footprint = path;
+      }
+      else if(arg == "--save")
+      {
+        options.recording_output = path;
       }
       else
       {

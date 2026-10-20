@@ -17,10 +17,10 @@ find_package(
 )
 
 # 创建项目自己的依赖包装 target
-add_library(coverage_rerun INTERFACE)
+add_library(rerun_dependency INTERFACE)
 
 # 在能访问 rerun_sdk 的当前目录中建立依赖关系
-target_link_libraries(coverage_rerun
+target_link_libraries(rerun_dependency
     INTERFACE
         rerun_sdk
 )
@@ -28,5 +28,5 @@ target_link_libraries(coverage_rerun
 # 提供统一的命名空间
 add_library(
     algorithms::rerun
-    ALIAS coverage_rerun
+    ALIAS rerun_dependency
 )

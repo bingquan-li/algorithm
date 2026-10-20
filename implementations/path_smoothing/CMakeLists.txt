@@ -10,5 +10,6 @@ target_include_directories(path_smoothing
 target_link_libraries(path_smoothing
     PUBLIC
         algorithms::eigen
+    PRIVATE algorithms::visualization
 )
 add_library(implementations::path_smoothing ALIAS path_smoothing)

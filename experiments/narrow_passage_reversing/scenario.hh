@@ -11,6 +11,7 @@ struct Options
   std::filesystem::path input;
   std::filesystem::path footprint;
   std::optional<std::filesystem::path> blueprint;
+  std::optional<std::filesystem::path> recording_output;
   bool viewer = true;
   bool help = false;
 };

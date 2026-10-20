@@ -1,4 +1,5 @@
 #include "local_escape_planner.hh"
+#include "later_boundary_visualization.hh"
 
 #include <algorithm>
 #include <array>
@@ -518,11 +519,14 @@ plan(algorithms::GridMap<std::uint8_t> const& grid,
 
   //
   validate(grid, start, footprint, config);
+  lateral_boundary_viz::begin(grid, start, footprint);
 
   Result result;
   // 这是初始位姿下，面向后退动作的左右边界信息。它主要用于解释环境和引导候选，不能单独证明轨迹安全。
   result.boundary =
       profile(grid, start, footprint, config, -config.reverse_length);
+  lateral_boundary_viz::boundary(start.position, direction(start),
+                                  result.boundary.longitudinal_samples, result.boundary.widths);
 
   // 起点安全检查
   double const initial_clearance =
@@ -536,6 +540,7 @@ plan(algorithms::GridMap<std::uint8_t> const& grid,
   if(initial_clearance <= config.safety_margin + epsilon)
   {
     result.status = Status::start_blocked;
+    lateral_boundary_viz::finish(result, footprint);
     return result;
   }
 
@@ -667,6 +672,7 @@ plan(algorithms::GridMap<std::uint8_t> const& grid,
         forward_distance - 0.25 * turning - 0.15 * curvature_effort -
         0.4 * std::abs(offset.dot(left)) - 0.2 * std::abs(end.yaw - start.yaw);
     std::size_t const index = result.candidates.size();
+    lateral_boundary_viz::candidate(index, candidate, footprint);
     if(candidate.feasible &&
        (!result.selected ||
         candidate.score > result.candidates[*result.selected].score))
@@ -790,6 +796,7 @@ plan(algorithms::GridMap<std::uint8_t> const& grid,
     }
   }
   result.status = result.selected ? Status::success : Status::no_path;
+  lateral_boundary_viz::finish(result, footprint);
   return result;
 }
 } // namespace local_escape

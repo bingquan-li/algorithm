@@ -1,7 +1,9 @@
 #include "file.hh"
-#include "rerun/rerun_wrapper.hh"
+#include "rerun/debug.hh"
+#include "rerun/recording.hh"
 #include "path_smoothing.hh"
 #include <iostream>
+#include <chrono>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -13,6 +15,7 @@ main(int argc, char** argv)
   {
     std::string csv_path = PG_SMOOTH_DEFAULT_PATH;
     bool show_viewer = true;
+    algorithms::viz::RecordingOptions recording_options;
     bool verbose = true;
     for(int i = 1; i < argc; ++i)
     {
@@ -20,11 +23,13 @@ main(int argc, char** argv)
       if(argument == "--help")
       {
         std::cout
-            << "Usage: pg_smooth [--path CSV] [--no-viewer] [--quiet] "
+            << "Usage: pg_smooth [--path CSV] [--no-viewer] [--save FILE.rrd] "
+               "[--quiet] "
                "[--help]\n"
             << "  --path CSV   Load a path from CSV (first two columns: x,y).\n"
             << "               Default: " << PG_SMOOTH_DEFAULT_PATH << '\n'
             << "  --no-viewer  Solve without opening the Rerun viewer.\n"
+            << "  --save FILE  Record to a file instead of opening a viewer.\n"
             << "  --quiet      Disable solver iteration logs; still print "
                "Result.\n"
             << "  --help       Show this help and exit.\n"
@@ -40,13 +45,21 @@ main(int argc, char** argv)
       {
         verbose = false;
       }
-      else if(argument == "--path")
+      else if(argument == "--path" || argument == "--save")
       {
         if(i + 1 == argc || std::string_view(argv[i + 1]).starts_with("--"))
         {
-          throw std::invalid_argument("--path requires a CSV file path");
+          throw std::invalid_argument(std::string(argument) +
+                                      " requires a file path");
         }
-        csv_path = argv[++i];
+        if(argument == "--path")
+        {
+          csv_path = argv[++i];
+        }
+        else
+        {
+          recording_options.output = argv[++i];
+        }
       }
       else
       {
@@ -55,6 +68,13 @@ main(int argc, char** argv)
       }
     }
 
+    recording_options.viewer = show_viewer;
+    algorithms::viz::Recording const recording("pg_smooth", recording_options);
+    algorithms::Debug::ScopedContext const context(
+        {0,
+         std::chrono::duration_cast<std::chrono::nanoseconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+             .count()});
     auto path = algorithms::load_path_from_csv(csv_path);
     path_smoothing::ProblemOptions po;
     po.fix_endpoints = true;
@@ -72,26 +92,7 @@ main(int argc, char** argv)
 
     auto result = path_smoothing::smooth(path, options);
     std::cout << result << '\n';
-    if(show_viewer)
-    {
-      rerun::RecordingStream rec("pg_smooth");
-      auto const viewer_status = rec.spawn();
-      if(viewer_status.is_err())
-      {
-        throw std::runtime_error(
-            "cannot start Rerun viewer: " + viewer_status.description +
-            " (use --no-viewer to solve without a viewer)");
-      }
-      rec.try_log(
-             "pg_origin",
-             rerun::LineStrips3D({rerun::LineStrip3D{path}}).with_radii(0.005F))
-          .throw_on_failure();
-      rec.try_log("pg_smooth",
-                  rerun::LineStrips3D({rerun::LineStrip3D{result.points}})
-                      .with_radii(0.005F)
-                      .with_colors({rerun::Color{255, 122, 133}}))
-          .throw_on_failure();
-    }
+    algorithms::Debug::flush();
     return result.converged ? 0 : 2;
   }
   catch(std::exception const& error)

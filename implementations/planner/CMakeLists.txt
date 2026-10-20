@@ -1,6 +1,7 @@
 add_library(planner
     SHARED
         local_escape.cc
+        debug_visualization.cc
 )
 target_include_directories(planner
     PUBLIC
@@ -11,6 +12,8 @@ target_link_libraries(planner
         algorithms::eigen
         implementations::planning_base
         implementations::lateral_boundary
+    PRIVATE
+        algorithms::visualization
 )
 
 add_library(implementations::planner ALIAS planner)

@@ -8,5 +8,6 @@ target_compile_definitions(pg_smooth
 target_link_libraries(pg_smooth
     PRIVATE
         algorithms::common
+        algorithms::visualization
         implementations::path_smoothing
 )

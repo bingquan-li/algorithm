@@ -1,4 +1,6 @@
 #include "local_escape.hh"
+#include "debug_visualization.hh"
+#include "rerun/debug.hh"
 
 #include <algorithm>
 #include <array>
@@ -602,7 +604,8 @@ Candidate
 extend(Context const& ctx,
        Candidate candidate,
        Motion const& motion,
-       SearchTiming& timing)
+       SearchTiming& timing,
+       std::size_t candidate_index)
 {
   DetailTimer const detail_timer(timing.details[2]);
   candidate.motions.push_back(motion);
@@ -631,6 +634,16 @@ extend(Context const& ctx,
     {
       candidate.rejected_pose = midpoint;
       candidate.reason = "collision_or_margin";
+      if(Debug::active())
+      {
+        planner_debug::rejection(
+            "gridmap/candidates/candidate_" + std::to_string(candidate_index),
+            midpoint,
+            ctx.footprint,
+            clearance,
+            half_motion_bound,
+            ctx.config.safety_margin);
+      }
       return candidate;
     }
     candidate.min_clearance = std::min(candidate.min_clearance, lower_bound);
@@ -727,6 +740,7 @@ evaluate_and_record(Context const& ctx,
                     0.2 * std::abs(end.z() - ctx.start.z());
 
   std::size_t const index = result.candidates.size();
+  planner_debug::candidate(index, candidate);
   if(candidate.feasible &&
      (!result.selected ||
       candidate.score > result.candidates[*result.selected].score))
@@ -753,7 +767,8 @@ try_reverse(Context const& ctx,
                         extend(ctx,
                                prefix,
                                {-ctx.config.reverse_length, curvature, 0.0},
-                               timing),
+                               timing,
+                               result.candidates.size()),
                         true,
                         result,
                         timing);
@@ -773,7 +788,11 @@ try_rotations(Context const& ctx,
   }
   for(double angle : ctx.config.rotation_angles)
   {
-    auto rotated = extend(ctx, prefix, {0.0, 0.0, angle}, timing);
+    auto rotated = extend(ctx,
+                          prefix,
+                          {0.0, 0.0, angle},
+                          timing,
+                          result.candidates.size());
     evaluate_and_record(ctx, rotated, true, result, timing);
     if(!rotated.rejected_pose)
     {
@@ -867,6 +886,7 @@ search(Context const& ctx, SearchTiming& timing)
                                              ctx.start,
                                              -ctx.config.reverse_length,
                                              timing);
+  planner_debug::boundary(result.boundary);
   timing.phase(1);
   // 起点安全检查
   double const initial_clearance = footprint_clearance(ctx, ctx.start, timing);
@@ -875,6 +895,13 @@ search(Context const& ctx, SearchTiming& timing)
   if(initial_clearance <= ctx.config.safety_margin + epsilon)
   {
     result.status = Status::start_blocked;
+    planner_debug::rejection("gridmap/start_blocked",
+                              ctx.start,
+                              ctx.footprint,
+                              initial_clearance,
+                              0.0,
+                              ctx.config.safety_margin);
+    planner_debug::finish(result);
     return result;
   }
 
@@ -897,7 +924,11 @@ search(Context const& ctx, SearchTiming& timing)
           compute_boundary_profile(ctx, ctx.start, length, timing);
       for(double curvature : curvatures(boundaries, ctx.config))
       {
-        auto forward = extend(ctx, root, {length, curvature, 0.0}, timing);
+        auto forward = extend(ctx,
+                              root,
+                              {length, curvature, 0.0},
+                              timing,
+                              result.candidates.size());
         evaluate_and_record(ctx, forward, false, result, timing);
         if(!forward.rejected_pose)
         {
@@ -919,6 +950,7 @@ search(Context const& ctx, SearchTiming& timing)
     }
   }
   result.status = result.selected ? Status::success : Status::no_path;
+  planner_debug::finish(result);
   return result;
 }
 
@@ -936,6 +968,7 @@ plan(algorithms::GridMap<std::uint8_t> const& grid,
     footprint = footprint.first(footprint.size() - 1);
   }
   validate(grid, start, footprint, config);
+  planner_debug::begin(grid, start, footprint, config.occupied_threshold);
 
   Context const ctx = make_context(grid, start, footprint, config);
   return search(ctx, timing);

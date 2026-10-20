@@ -3,6 +3,7 @@
 #include "backend/osqp.hh"
 #include "backend/projected_gradient.hh"
 #include "detail/validation.hh"
+#include "rerun/debug.hh"
 
 namespace path_smoothing
 {
@@ -48,8 +49,10 @@ Result
 smooth(std::vector<Eigen::Vector2d> const& points, Options const& options)
 {
   validate_problem(points, options.problem);
+  algorithms::Debug::clear("pg_smooth");
+  algorithms::Debug::line("pg_origin", points, {245, 255, 255}, 0.005F, 0.0F);
 
-  return std::visit(
+  auto result = std::visit(
       [&](auto const& solver_options) -> Result
       {
         detail::validate_solver(solver_options);
@@ -57,6 +60,12 @@ smooth(std::vector<Eigen::Vector2d> const& points, Options const& options)
         return detail::solve_backend(points, options.problem, solver_options);
       },
       options.solver);
+  algorithms::Debug::line("pg_smooth",
+                          result.points,
+                          {255, 122, 133},
+                          0.005F,
+                          0.0F);
+  return result;
 }
 
 } // namespace path_smoothing

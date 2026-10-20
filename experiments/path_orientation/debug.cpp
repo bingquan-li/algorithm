@@ -1,5 +1,5 @@
 #include "debug.h"
-#include <rerun.hpp>
+#include "rerun/debug.hh"
 #include <cstdlib>
 #include <nlohmann/json.hpp>
 #include <array>
@@ -7,6 +7,7 @@
 #include <fstream>
 #include <mutex>
 #include <stdexcept>
+#include <type_traits>
 
 namespace
 {
@@ -15,20 +16,20 @@ namespace
 class JsonlSink
 {
 public:
+  bool
+  enabled() const
+  {
+    return file_.is_open();
+  }
   JsonlSink()
   {
-    // auto const* path = std::getenv("REFERENCE_LINE_DEBUG_FILE");
-    // if(!path || !*path)
-    //   return;
-    file_.open(
-        "/workspace/algorithms/data/narrow_passage_reverseing2/debug.json",
-        std::ios::app);
+    auto const* path = std::getenv("REFERENCE_LINE_DEBUG_FILE");
+    if(!path || !*path)
+      return;
+    file_.open(path, std::ios::app);
     if(!file_)
     {
-      throw std::runtime_error(
-          "Cannot open debug JSONL: " +
-          std::string("/workspace/algorithms/data/narrow_passage_reverseing2/"
-                      "debug.json"));
+      throw std::runtime_error("Cannot open debug JSONL: " + std::string(path));
     }
     write({{"type", "session"},
            {"application_id", "reference_line"},
@@ -50,7 +51,11 @@ public:
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::system_clock::now().time_since_epoch())
             .count();
-    event["timeline"] = {{"name", "planning_cycle"}, {"value", 0}};
+    if(auto const context = algorithms::Debug::context())
+    {
+      event["timeline"] = {{"name", "frame"}, {"value", context->frame_id}};
+      event["frame_timestamp_unix_ns"] = context->timestamp_ns;
+    }
     file_ << event.dump() << '\n';
     file_.flush();
     if(!file_)
@@ -73,25 +78,10 @@ file_sink()
 }
 
 using Color = std::array<unsigned char, 4>;
-rerun::Color
+algorithms::Debug::Color
 rerun_color(Color const& color)
 {
   return {color[0], color[1], color[2], color[3]};
-}
-
-rerun::RecordingStream&
-recording()
-{
-  static rerun::RecordingStream rec("reference_line");
-  static bool const initialized = [&]
-  {
-    rec.spawn().exit_on_failure();
-    rec.set_time_sequence("planning_cycle", 0);
-    rec.log_static("/", rerun::ViewCoordinates::RIGHT_HAND_Z_UP);
-    return true;
-  }();
-  (void)initialized;
-  return rec;
 }
 
 template <typename Points>
@@ -101,12 +91,8 @@ xy_line(std::string const& entity,
         Color color,
         float radius)
 {
-  std::vector<rerun::encodings::Vec3D> vertices;
-  vertices.reserve(points.size());
-  for(auto const& p : points)
-    vertices.emplace_back(static_cast<float>(p.x()),
-                          static_cast<float>(p.y()),
-                          0.0F);
+  if(!algorithms::Debug::active() && !file_sink().enabled())
+    return;
   auto data = nlohmann::json::array();
   for(auto const& p : points)
   {
@@ -119,22 +105,26 @@ xy_line(std::string const& entity,
                      {"color_rgba", color},
                      {"radius", radius},
                      {"radius_unit", "m"}});
-  recording().log(entity,
-                  rerun::LineStrips3D(rerun::LineStrip3D(std::move(vertices)))
-                      .with_colors({rerun_color(color)})
-                      .with_radii({radius}));
+  if constexpr(std::is_same_v<typename Points::value_type, Eigen::Vector2d>)
+  {
+    algorithms::Debug::line(entity, points, rerun_color(color), radius, 0.0F);
+  }
+  else
+  {
+    algorithms::Debug::line_xy(entity, points, rerun_color(color), radius);
+  }
 }
 
 void
 sl_line(char const* entity, std::vector<reference_line::SLPoint> const& points)
 {
-  std::vector<rerun::encodings::Vec2D> vertices;
-  vertices.reserve(points.size());
-  for(auto const& p : points)
-    vertices.emplace_back(static_cast<float>(p.s), static_cast<float>(p.l));
+  if(!algorithms::Debug::active() && !file_sink().enabled())
+    return;
   auto data = nlohmann::json::array();
   for(auto const& p : points)
+  {
     data.push_back({p.s, p.l});
+  }
   file_sink().write({{"type", "line_strip_2d"},
                      {"entity", entity},
                      {"coordinate_system", "sl"},
@@ -143,12 +133,14 @@ sl_line(char const* entity, std::vector<reference_line::SLPoint> const& points)
                      {"radius", 1.5},
                      {"radius_unit", "ui_points"},
                      {"draw_order", 10.0}});
-  recording().log(
-      entity,
-      rerun::LineStrips2D(rerun::components::LineStrip2D(std::move(vertices)))
-          .with_colors({rerun::Color(255, 211, 65, 255)})
-          .with_radii({rerun::Radius::ui_points(1.5F)})
-          .with_draw_order(10.0F));
+  if(algorithms::Debug::active())
+  {
+    std::vector<Eigen::Vector2d> vertices;
+    vertices.reserve(points.size());
+    for(auto const& p : points)
+      vertices.emplace_back(p.s, p.l);
+    algorithms::Debug::line_2d(entity, vertices, {255, 211, 65, 255});
+  }
 }
 } // namespace
 
@@ -161,9 +153,7 @@ debug_log(std::string const& message)
                      {"entity", "/logs/reference_line"},
                      {"level", "Debug"},
                      {"message", message}});
-  recording().log(
-      "/logs/reference_line",
-      rerun::TextLog(message).with_level(rerun::TextLogLevel::Debug));
+  algorithms::Debug::text("/logs/reference_line", message);
 }
 void
 error_log(std::string const& message)
@@ -172,9 +162,7 @@ error_log(std::string const& message)
                      {"entity", "/logs/reference_line"},
                      {"level", "Error"},
                      {"message", message}});
-  recording().log(
-      "/logs/reference_line",
-      rerun::TextLog(message).with_level(rerun::TextLogLevel::Error));
+  algorithms::Debug::text("/logs/reference_line", message, true);
 }
 void
 log_xy_global_path(std::string const& entity,
