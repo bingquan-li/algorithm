@@ -1,0 +1,35 @@
+<mujoco model="planar elastic suspended load">
+  <compiler angle="radian"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+  <default>
+    <geom contype="0" conaffinity="0"/>
+    <joint limited="false"/>
+  </default>
+  <visual><global offwidth="1000" offheight="700"/></visual>
+  <worldbody>
+    <light pos="0 -3 5"/>
+    <geom name="floor" type="plane" size="4 2 .1" rgba=".18 .21 .25 1"/>
+    <geom name="rail" type="capsule" fromto="-1 0 2 3 0 2" size=".025" rgba=".5 .5 .5 1"/>
+    <geom name="target" type="capsule" fromto="1 -.18 .1 1 -.18 2.25" size=".012" rgba=".2 1 .3 .55"/>
+    <body name="cart" pos="0 0 2">
+      <joint name="cart_x" type="slide" axis="1 0 0"/>
+      <geom name="cart_geom" type="box" size=".13 .10 .07" mass="2" rgba=".2 .5 1 1"/>
+      <site name="anchor" size=".025"/>
+      <body name="load" pos="0 0 -.8">
+        <joint name="relative_x" type="slide" axis="1 0 0" damping=".04"/>
+        <joint name="relative_z" type="slide" axis="0 0 1"/>
+        <geom name="load_geom" type="sphere" size=".075" mass=".5" rgba="1 .5 .12 1"/>
+        <site name="load_site" size=".015"/>
+      </body>
+    </body>
+  </worldbody>
+  <tendon>
+    <spatial name="spring" limited="false" stiffness="80" damping="1.2"
+             springlength=".8" width=".012" rgba=".95 .85 .25 1">
+      <site site="anchor"/>
+      <site site="load_site"/>
+    </spatial>
+  </tendon>
+  <actuator><motor name="drive" joint="cart_x" gear="1" ctrllimited="true" ctrlrange="-12 12"/></actuator>
+  <keyframe><key name="equilibrium" qpos="0 0 -.0613125"/></keyframe>
+</mujoco>
