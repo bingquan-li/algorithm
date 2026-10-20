@@ -28,7 +28,9 @@ main(int argc, char** argv)
     algorithms::Pose const start{scenario.start_pose.pose.x(),
                                  scenario.start_pose.pose.y(),
                                  scenario.start_pose.pose.z()};
-    algorithms::Config const config;
+    algorithms::Config config;
+    config.max_corner_step = 0.02; // 先尝试 2 cm
+    config.safety_margin = 0.02;   // 保持 2 cm 安全余量
     auto const result = timed_call("planner.plan",
                                    [&]
                                    {

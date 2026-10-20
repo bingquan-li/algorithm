@@ -1,6 +1,6 @@
 #pragma once
 #include "footprint.hh"
-#include "local_escape.hh"
+#include "grid_map.hh"
 #include <filesystem>
 #include <optional>
 
@@ -18,7 +18,7 @@ struct Options
 struct Scenario
 {
   algorithms::GridMap<std::uint8_t> grid;
-  algorithms::RobotGeometry geometry; // 配置中的固定车型及后轴局部轮廓。
+  algorithms::RobotGeometry geometry;  // 配置中的固定车型及后轴局部轮廓。
   algorithms::RearAxlePose start_pose; // 后轴的初始世界位姿。
 };
 

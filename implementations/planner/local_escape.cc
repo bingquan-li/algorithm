@@ -948,7 +948,9 @@ plan(algorithms::GridMap<std::uint8_t> const& grid,
      Config const& config)
 {
   if(!geometry.local_footprint())
+  {
     throw std::invalid_argument("Planning requires a local robot outline");
+  }
   return plan(grid, start, geometry.local_footprint()->vertices(), config);
 }
 

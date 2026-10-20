@@ -1,5 +1,7 @@
 #pragma once
 #include "scenario.hh"
+#include "local_escape.hh"
+
 #include <rerun.hpp>
 
 namespace narrow_passage
