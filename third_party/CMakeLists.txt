@@ -1,4 +1,5 @@
 add_subdirectory(rerun)
+add_subdirectory(mujoco)
 
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 add_library(algorithms_eigen INTERFACE)

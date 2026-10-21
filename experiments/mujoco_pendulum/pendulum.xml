@@ -1,0 +1,52 @@
+<mujoco model="controlled_pendulum">
+  <compiler angle="radian"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="RK4"/>
+  <visual>
+    <headlight ambient="0.3 0.3 0.3" diffuse="0.6 0.6 0.6"/>
+    <rgba haze="0.85 0.9 0.95 1"/>
+  </visual>
+  <asset>
+    <texture name="ground_grid" type="2d" builtin="checker"
+             rgb1="0.73 0.77 0.8" rgb2="0.64 0.69 0.73" width="512" height="512"/>
+    <material name="ground" texture="ground_grid" texrepeat="8 8" texuniform="true"
+              reflectance="0.05"/>
+    <material name="steel" rgba="0.24 0.3 0.36 1" specular="0.5" shininess="0.5"/>
+    <material name="base" rgba="0.14 0.19 0.24 1"/>
+    <material name="brass" rgba="0.9 0.61 0.2 1" specular="0.6" shininess="0.6"/>
+  </asset>
+  <default>
+    <!-- Static scenery only: no contacts with the simulated pendulum. -->
+    <default class="stand">
+      <geom contype="0" conaffinity="0" material="steel"/>
+    </default>
+  </default>
+  <worldbody>
+    <light pos="-2 -2 4" dir="0.4 0.4 -1"/>
+    <light pos="2 1 3" dir="-0.4 -0.2 -1" diffuse="0.35 0.35 0.35" castshadow="false"/>
+    <geom name="floor" type="plane" size="4 4 0.1" material="ground"/>
+
+    <!-- The frame is behind the XZ swing plane; the axle runs along Y. -->
+    <body name="support" childclass="stand">
+      <geom name="platform" type="box" pos="0 0.12 0.06" size="1.05 0.48 0.06" material="base"/>
+      <geom name="left_foot" type="box" pos="-0.85 0.24 0.15" size="0.14 0.18 0.03"/>
+      <geom name="right_foot" type="box" pos="0.85 0.24 0.15" size="0.14 0.18 0.03"/>
+      <geom name="left_post" type="box" pos="-0.85 0.24 0.91" size="0.055 0.055 0.79"/>
+      <geom name="right_post" type="box" pos="0.85 0.24 0.91" size="0.055 0.055 0.79"/>
+      <geom name="crossbar" type="box" pos="0 0.24 1.68" size="0.905 0.065 0.06"/>
+      <geom name="bearing_mount" type="box" pos="0 0.24 1.54" size="0.11 0.08 0.14"/>
+      <geom name="axle" type="cylinder" fromto="0 -0.09 1.5 0 0.32 1.5" size="0.025"/>
+      <geom name="bearing" type="cylinder" fromto="0 0.13 1.5 0 0.18 1.5"
+            size="0.075" material="brass"/>
+      <geom name="axle_cap" type="cylinder" fromto="0 -0.1 1.5 0 -0.07 1.5"
+            size="0.055" material="brass"/>
+    </body>
+    <body name="pendulum" pos="0 0 1.5">
+      <joint name="hinge" type="hinge" axis="0 1 0" damping="0.005"/>
+      <geom type="capsule" fromto="0 0 0 0 0 -1" size="0.04" mass="1"
+            rgba="0.2 0.6 0.9 1"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor name="motor" joint="hinge" gear="1" ctrllimited="true" ctrlrange="-10 10"/>
+  </actuator>
+</mujoco>
