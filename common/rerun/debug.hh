@@ -94,8 +94,10 @@ public:
   // False when unbound, disabled, or this thread has no context.
   [[nodiscard]] static bool
   active() noexcept;
+  // Apply SDK time immediately on this thread, even while logging is disabled.
   static void
   set_context(Context context) noexcept;
+  // Also clears SDK time on this thread.
   static void
   clear_context() noexcept;
   [[nodiscard]] static std::optional<Context>
@@ -171,8 +173,11 @@ private:
   initialize(rerun::RecordingStream const& recording);
   static void
   shutdown() noexcept;
+  static void
+  sync_time() noexcept;
+  // Logging checks availability only; time is managed by context transitions.
   static rerun::RecordingStream const*
-  prepare();
+  active_recording() noexcept;
   // Defined in one shared library, not separate header instances in each DSO.
   static std::atomic<rerun::RecordingStream const*> recording_;
   static std::atomic<bool> enabled_;

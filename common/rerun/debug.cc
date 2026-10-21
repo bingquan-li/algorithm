@@ -20,14 +20,14 @@ Debug::initialize(rerun::RecordingStream const& recording)
                            "destroy it before creating another");
   }
   enabled_.store(true);
-  context_.reset();
+  clear_context();
 }
 
 void
 Debug::shutdown() noexcept
 {
+  clear_context();
   recording_.store(nullptr);
-  context_.reset();
 }
 
 
@@ -51,8 +51,7 @@ Debug::set_enabled(bool enabled) noexcept
 bool
 Debug::active() noexcept
 {
-  return enabled_.load(std::memory_order_relaxed) && context_.has_value() &&
-         recording_.load(std::memory_order_acquire) != nullptr;
+  return active_recording() != nullptr;
 }
 
 
@@ -60,6 +59,7 @@ void
 Debug::set_context(Context context) noexcept
 {
   context_ = context;
+  sync_time();
 }
 
 
@@ -67,6 +67,7 @@ void
 Debug::clear_context() noexcept
 {
   context_.reset();
+  sync_time();
 }
 
 
@@ -80,31 +81,52 @@ Debug::context() noexcept
 Debug::ScopedContext::ScopedContext(Context context) noexcept
   : previous_(context_)
 {
-  context_ = context;
+  set_context(context);
 }
 
 
 Debug::ScopedContext::~ScopedContext()
 {
-  context_ = previous_;
+  if(previous_)
+  {
+    set_context(*previous_);
+  }
+  else
+  {
+    clear_context();
+  }
 }
 
 
-rerun::RecordingStream const*
-Debug::prepare()
+void
+Debug::sync_time() noexcept
 {
-  if(!active())
-  {
-    return nullptr;
-  }
   auto const* rec = recording_.load(std::memory_order_acquire);
-  // SDK time is thread-local too. Set it on every write, including after scope restoration.
+  if(rec == nullptr)
+  {
+    return;
+  }
+  // Apply at context transitions, including scope restoration and clearing.
+  // Do not gate on enabled_: another thread may re-enable logging afterwards.
   rec->reset_time();
+  if(!context_)
+  {
+    return;
+  }
   rec->set_time_sequence("frame", context_->frame_id);
   rec->set_time_timestamp_nanos_since_epoch("timestamp",
                                             context_->timestamp_ns);
   rec->set_time_sequence("step", context_->step);
-  return rec;
+}
+
+rerun::RecordingStream const*
+Debug::active_recording() noexcept
+{
+  if(!enabled_.load(std::memory_order_relaxed) || !context_)
+  {
+    return nullptr;
+  }
+  return recording_.load(std::memory_order_acquire);
 }
 namespace
 {
@@ -133,7 +155,7 @@ Debug::line(std::string_view entity,
             float z,
             bool closed)
 {
-  auto const* rec = prepare();
+  auto const* rec = active_recording();
   if(rec == nullptr)
   {
     return;
@@ -160,7 +182,7 @@ Debug::line_xy(std::string_view entity,
                float radius,
                float z)
 {
-  if(auto const* rec = prepare())
+  if(auto const* rec = active_recording())
   {
     rec->try_log(entity,
                  rerun::LineStrips3D(viz::line_xy(points, z))
@@ -178,7 +200,7 @@ Debug::line_2d(std::string_view entity,
                float radius_ui,
                float draw_order)
 {
-  auto const* rec = prepare();
+  auto const* rec = active_recording();
   if(rec == nullptr)
   {
     return;
@@ -207,7 +229,7 @@ Debug::point(std::string_view entity,
              std::string_view label,
              bool show_label)
 {
-  if(auto const* rec = prepare())
+  if(auto const* rec = active_recording())
   {
     rec->try_log(entity,
                  rerun::Points3D({viz::position(p, z)})
@@ -230,7 +252,7 @@ Debug::arrow(std::string_view entity,
              std::string_view label,
              bool show_label)
 {
-  if(auto const* rec = prepare())
+  if(auto const* rec = active_recording())
   {
     rec->try_log(entity,
                  rerun::Arrows3D::from_vectors(
@@ -251,7 +273,7 @@ Debug::boxes(std::string_view entity,
              Eigen::Vector3d const& half_size,
              Color tint)
 {
-  auto const* rec = prepare();
+  auto const* rec = active_recording();
   if(rec == nullptr)
   {
     return;
@@ -277,7 +299,7 @@ Debug::boxes(std::string_view entity,
 void
 Debug::scalar(std::string_view entity, double value)
 {
-  if(auto const* rec = prepare())
+  if(auto const* rec = active_recording())
   {
     rec->try_log(entity, rerun::Scalars(value)).throw_on_failure();
   }
@@ -287,7 +309,7 @@ Debug::scalar(std::string_view entity, double value)
 void
 Debug::text(std::string_view entity, std::string_view message, bool error)
 {
-  if(auto const* rec = prepare())
+  if(auto const* rec = active_recording())
   {
     rec->try_log(entity,
                  rerun::TextLog(std::string(message))
@@ -301,7 +323,7 @@ Debug::text(std::string_view entity, std::string_view message, bool error)
 void
 Debug::clear(std::string_view entity, bool recursive)
 {
-  if(auto const* rec = prepare())
+  if(auto const* rec = active_recording())
   {
     rec->try_log(entity, rerun::Clear(recursive)).throw_on_failure();
   }
@@ -311,7 +333,7 @@ Debug::clear(std::string_view entity, bool recursive)
 void
 Debug::document(std::string_view entity, std::string_view message)
 {
-  if(auto const* rec = prepare())
+  if(auto const* rec = active_recording())
   {
     rec->try_log(entity, rerun::TextDocument(std::string(message)))
         .throw_on_failure();

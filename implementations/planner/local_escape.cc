@@ -636,13 +636,13 @@ extend(Context const& ctx,
       candidate.reason = "collision_or_margin";
       if(Debug::active())
       {
-        planner_debug::rejection(
-            "gridmap/candidates/candidate_" + std::to_string(candidate_index),
-            midpoint,
-            ctx.footprint,
-            clearance,
-            half_motion_bound,
-            ctx.config.safety_margin);
+        planner_debug::rejection("gridmap/candidates/candidate_" +
+                                     std::to_string(candidate_index),
+                                 midpoint,
+                                 ctx.footprint,
+                                 clearance,
+                                 half_motion_bound,
+                                 ctx.config.safety_margin);
       }
       return candidate;
     }
@@ -896,11 +896,11 @@ search(Context const& ctx, SearchTiming& timing)
   {
     result.status = Status::start_blocked;
     planner_debug::rejection("gridmap/start_blocked",
-                              ctx.start,
-                              ctx.footprint,
-                              initial_clearance,
-                              0.0,
-                              ctx.config.safety_margin);
+                             ctx.start,
+                             ctx.footprint,
+                             initial_clearance,
+                             0.0,
+                             ctx.config.safety_margin);
     planner_debug::finish(result);
     return result;
   }
@@ -968,8 +968,10 @@ plan(algorithms::GridMap<std::uint8_t> const& grid,
     footprint = footprint.first(footprint.size() - 1);
   }
   validate(grid, start, footprint, config);
+  // 开始时，绘制基础的环境信息，grid 和 footprint
   planner_debug::begin(grid, start, footprint, config.occupied_threshold);
 
+  // 这里传入的 footprint 应该是 base_link 下的
   Context const ctx = make_context(grid, start, footprint, config);
   return search(ctx, timing);
 }
@@ -983,6 +985,12 @@ plan(algorithms::GridMap<std::uint8_t> const& grid,
   if(!geometry.local_footprint())
   {
     throw std::invalid_argument("Planning requires a local robot outline");
+  }
+  if(geometry.local_footprint()->frame_id() != "base_link")
+  {
+    std::string err_msg = "fottprint need base_link, cur frame_id: " +
+                          geometry.local_footprint()->frame_id();
+    throw std::invalid_argument(err_msg);
   }
   return plan(grid, start, geometry.local_footprint()->vertices(), config);
 }
