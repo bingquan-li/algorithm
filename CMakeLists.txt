@@ -11,9 +11,6 @@ add_subdirectory(third_party)
 add_subdirectory(common)
 add_subdirectory(implementations)
 
-include(CTest)
-if(BUILD_TESTING)
-    add_subdirectory(tests)
-endif()
 
 add_subdirectory(experiments)
+add_subdirectory(exercise)
